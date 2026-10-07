@@ -173,3 +173,12 @@ Per the pre-registered plan: C2-cma 24/25 at budget 200 (C-cma v1 11/25, B-cma 1
 (toy is the dev set, no ei_2pop run, best-v2-score is not always a checker success) in
 `docs/phase0.md` section 6. Objective names: naive, expert_v1 (was "expert"), expert_v2;
 condition C2 = C with expert_v2. Event logs from before the rename say "expert" = v1.
+
+## Submission rule (all baselines), decided before any test run
+`baseline.submission_checks = 3` (hash-recorded; 0 = the Phase 0 rule). Applies to A, B, C, C2:
+3 evaluations are reserved from the run's own budget; at the end the 3 best DISTINCT candidates by
+the condition's objective are checked with the checker (budgeted `check` calls, role `harness`,
+logged as `select_submission`); the best-scored one that passes is submitted, else the best-scored
+one. Phase 0 numbers under the old rule are kept next to the new ones in `docs/phase0.md`.
+Conventions to remember: expert_v2 supports at most one unobserved population; logs written before
+the rename say "expert", which means expert_v1.

@@ -274,7 +274,33 @@ Not shown here: any ei_2pop evidence for v2, any effect of delta or lambda, and 
 advantage depends on the toy having no unobserved population (the unobserved-population
 branch is only unit-tested via the ei_2pop zero-score check).
 
-## 7. ei_2pop smoke (budget 1000, task seed0, seed 0, one run per condition)
+## 7. Submission rule (reserve 3 evaluations, check the top 3)
+
+Decided before any test run and applied to every baseline (A, B, C, C2): 3 evaluations are
+reserved from the run's own budget, so the optimizer gets 197 of the 200; at the end the 3
+best DISTINCT parameter sets by the condition's objective are checked with the checker, and
+the best-scored one that passes is submitted, else the best-scored one
+(`baseline.submission_checks`, `choose_submission` in `src/bench/runner.py`). Rerun of the toy
+grid (budget 200, 5 tasks x 5 seeds, `results/phase0/toy_grid_sr.md`), next to the old rule
+(submit the best-scored point, all 200 evaluations to the optimizer; sections 2 and 6):
+
+| condition | old rule | new rule | Wilson 95% (new) |
+|---|---|---|---|
+| A | 0/25 | 0/25 | [0.00, 0.13] |
+| B-cma | 18/25 | 17/25 | [0.48, 0.83] |
+| B-tpe | 12/25 | 12/25 | [0.30, 0.67] |
+| C-cma (v1) | 11/25 | 11/25 | [0.27, 0.63] |
+| C-tpe (v1) | 2/25 | 2/25 | [0.02, 0.25] |
+| C2-cma (v2) | 24/25 | 24/25 | [0.80, 0.99] |
+| C2-tpe (v2) | 17/25 | 18/25 | [0.52, 0.86] |
+
+Per-run comparison: only two of 175 runs changed. B-cma on task seed0, seed 1 went from success
+to failure: its only success was found at evaluation 200, the last one, which the reserve
+takes away. C2-tpe on task seed1, seed 4 went from failure to success: it is the run of
+section 6 whose best v2 score was not a success; the top-3 check found the successful point.
+Everything else is identical in outcome. v2 results remain development numbers.
+
+## 8. ei_2pop smoke (budget 1000, task seed0, seed 0, one run per condition)
 
 | condition | success | evals used | first success (eval) | final error |
 |---|---|---|---|---|
@@ -290,7 +316,7 @@ The wall clock of the naive conditions is about 90 to 120 s per run versus about
 expert ones (`ei_smoke.csv`). The target was that A rarely succeeds on ei_2pop; one run
 cannot confirm that.
 
-## 8. Reproduce
+## 9. Reproduce
 
 ```
 python -m bench.batch configs/exp_toy_1pop.yaml --tasks "tasks/toy_1pop_*.json" \

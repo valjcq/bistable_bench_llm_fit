@@ -1,6 +1,7 @@
-# Notes for the remaining checkpoints
+# Notes: decision log
 
-Requirements from reviews, to honour when we get there.
+Internal log of design decisions and caveats (the explanation of the environment is in
+[docs/environment.md](docs/environment.md)).
 
 ## Status
 All four checkpoints are implemented. Things to keep in mind when building optimizers/agent:

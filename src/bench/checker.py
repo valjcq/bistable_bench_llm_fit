@@ -151,8 +151,8 @@ def find_fixed_points_1d(net: NetArrays, cfg: CheckerConfig) -> list[float]:
       1. both roots lie inside one cell (their separation is < h), and
       2. |g| at the neighbouring nodes is above `near_tangent_tol`, so (c) is not triggered.
     A pair that close means the parameters sit at a saddle-node (fold) within about 1e-5 or
-    less (relative): the dip of g below zero inside a cell is at most g'' h^2 / 8, i.e. ~1e-8
-    times g''. Condition 2 would additionally need g'' > ~1e5, but within the parameter bounds
+    less (relative): the dip of g below zero inside a cell is at most g'' h^2 / 8, i.e. ~3e-10
+    times g''. Condition 2 would additionally need g'' > ~3e5, but within the parameter bounds
     used here g'' <~ 1e3, so (c) always fires first; the limit is purely theoretical for the
     shipped configs. And even if such a pair were missed, the stable state of that pair has
     |lambda| ~ sqrt(distance to the fold): it is marginal, a useless target for fitting.

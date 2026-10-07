@@ -132,7 +132,7 @@ class ExperimentConfig:
     budget: BudgetConfig = field(default_factory=BudgetConfig)
 
     def __post_init__(self) -> None:
-        model = self.model()  # validates the model spec
+        self.model()  # validates the model spec (raises on a bad one)
         if (self.checker.tol, self.checker.forbid_extra_stable_states) != (
             self.task.tol,
             self.task.forbid_extra_stable_states,
@@ -143,7 +143,6 @@ class ExperimentConfig:
                 f"scoring.naive_ic_fractions needs one entry per target (K={self.task.K}), "
                 f"got {len(self.scoring.naive_ic_fractions)}"
             )
-        del model
 
     def model(self) -> RateNetwork:
         """Build the model object described by `model_spec`."""

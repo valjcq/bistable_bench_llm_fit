@@ -7,6 +7,8 @@ exact/multi-start fixed-point checker, a fixed-step simulator, three kept-apart 
 (naive, expert, final metric), an evaluation budget, and planted tasks whose solutions are known to
 exist. Nothing here depends on an LLM or an agent.
 
+How the environment works: [docs/environment.md](docs/environment.md).
+
 ## Install
 
 Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).

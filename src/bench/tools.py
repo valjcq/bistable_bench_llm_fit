@@ -37,6 +37,9 @@ RUN_FIELDS = tuple(RunResult.__dataclass_fields__)  # what get_run_results can r
 DEFAULT_RUN_FIELDS = [f for f in RUN_FIELDS if f != "history"]  # history can be long
 
 
+JSON_SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"  # what the schemas declare
+
+
 def _error(type_: str, message: str) -> dict[str, Any]:
     return {"error": {"type": type_, "message": message}}
 
@@ -83,7 +86,7 @@ class Episode:
         }
         n_pops = len(self.env.describe()["populations"])
         budget = self.env.budget_total
-        return [
+        specs = [
             {
                 "name": "get_task",
                 "description": "The task: target states, tolerance, free parameters with bounds "
@@ -185,6 +188,9 @@ class Episode:
                 },
             },
         ]
+        for spec in specs:
+            spec["input_schema"]["$schema"] = JSON_SCHEMA_DRAFT
+        return specs
 
     # ---- the single entry point -------------------------------------------------------
 
@@ -192,6 +198,7 @@ class Episode:
         """Run tool `name` with `arguments`; always returns a JSON-serializable dict."""
         arguments = {} if arguments is None else arguments
         invalid = False
+        call_id = self.logger.begin_call() if self.logger is not None else None
         specs = {s["name"]: s for s in self.tool_specs()}
         if self.submitted:
             out, invalid = _error("episode_over", "the episode has ended (submit was called)"), True
@@ -210,10 +217,20 @@ class Episode:
                 out = _error("budget_exhausted", str(e))
             except ValueError as e:  # raised by the environment BEFORE charging anything
                 out, invalid = _error("invalid_argument", str(e)), True
+            finally:
+                if self.logger is not None:
+                    self.logger.end_call()  # (also on a bug: the next line must not be a child)
         out = json.loads(json.dumps(out))  # guarantees plain JSON types for the caller
         if self.logger is not None:
+            self.logger.end_call()
             self.logger.log(
-                self.role, name, arguments, out, self.env.budget_remaining, invalid=invalid
+                self.role,
+                name,
+                arguments,
+                out,
+                self.env.budget_remaining,
+                invalid=invalid,
+                call_id=call_id,
             )
         return out
 

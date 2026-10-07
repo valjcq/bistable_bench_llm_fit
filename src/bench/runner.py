@@ -90,13 +90,16 @@ def run_baseline(
         env = Environment.from_task(cfg, task, event_hook=logger.env_hook)
         registry = RunRegistry(env, episode_seed=seed)
         budget = env.budget_remaining
+        call_id = logger.begin_call()  # the evaluations below get this as parent_call_id
         run = registry.run(opt_name, objective, budget)
+        logger.end_call()
         logger.log(
             "harness",
             "run_optimizer",
             {"optimizer": opt_name, "objective": objective, "run_budget": budget},
             {k: v for k, v in run.to_dict().items() if k != "history"},
             env.budget_remaining,
+            call_id=call_id,
         )
         metric = env.final_report(run.best_params)  # the submission
     result = {

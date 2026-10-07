@@ -63,6 +63,16 @@ def test_hash_is_stable_and_sensitive(cfg_toy, cfg_ei):
     assert changed_tol.generation_hash() != cfg_toy.generation_hash()
 
 
+def test_expert_penalty_must_exceed_tol_times_k(cfg_toy):
+    """penalty / K must be > tol, or an unmatched target could hide below the success level."""
+    K, tol = cfg_toy.task.K, cfg_toy.task.tol
+    with pytest.raises(ValueError, match="expert_penalty"):
+        replace(cfg_toy, scoring=replace(cfg_toy.scoring, expert_penalty=K * tol))  # equal
+    with pytest.raises(ValueError, match="expert_penalty"):
+        replace(cfg_toy, scoring=replace(cfg_toy.scoring, expert_penalty=0.01))
+    replace(cfg_toy, scoring=replace(cfg_toy.scoring, expert_penalty=K * tol * 1.01))  # ok
+
+
 def test_hash_covers_model_content_not_its_path(tmp_path, cfg_toy):
     spec = dict(cfg_toy.model_spec)
     spec["fixed"] = {**spec["fixed"], "tau": 11.0}

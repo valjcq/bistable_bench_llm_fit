@@ -27,7 +27,7 @@ from bench.tasks import load_task
 TASKS = Path(__file__).resolve().parents[1] / "tasks"
 FIELDS = {
     "timestamp", "step", "role", "name", "arguments", "output", "output_sha256", "tokens",
-    "latency", "budget_after", "seed", "config_hash", "invalid",
+    "latency", "budget_after", "seed", "config_hash", "invalid", "call_id", "parent_call_id",
 }  # fmt: skip
 
 
@@ -96,7 +96,10 @@ def test_run_is_reconstructible_from_events_and_config(small_cfg, toy_task, tmp_
     cfg = config_from_dict(exp, exp["model"], resolved=True)
     assert cfg.hash() == res["config_hash"]  # the saved config is the one that was run
     env = Environment(cfg, np.array(saved["task"]["targets"]), saved["task"]["seed"])
-    ev = [e for e in read_events(d / "events.jsonl") if e["name"] == "evaluate"]
+    all_events = read_events(d / "events.jsonl")
+    run_line = next(e for e in all_events if e["name"] == "run_optimizer")
+    ev = [e for e in all_events if e["name"] == "evaluate"]
+    assert {e["parent_call_id"] for e in ev} == {run_line["call_id"]}  # grouped by call
     for e in ev:  # every logged score is reproduced by a fresh environment
         assert env.evaluate(e["arguments"]["params"], saved["objective"]) == e["output"]["value"]
     best = min(ev, key=lambda e: e["output"]["value"])  # first minimum = the submitted point

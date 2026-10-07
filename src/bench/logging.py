@@ -3,7 +3,11 @@
 Every line has the same fields:
 
     timestamp, step, role, name, arguments, output, output_sha256, tokens, latency,
-    budget_after, seed, config_hash, invalid
+    budget_after, seed, config_hash, invalid, call_id, parent_call_id
+
+`call_id` is set on the line a tool call itself writes (Episode.call, or the runner's
+run_optimizer); `parent_call_id` is set on every line written WHILE that call runs (the
+environment and optimizer events it triggers), so a log can be grouped by call.
 
 `name` is the environment method (evaluate, check, simulate, final_report, budget_exhausted)
 or, from checkpoint 7 on, a tool name. `output` is the JSON result; if its JSON text is longer
@@ -64,6 +68,18 @@ class JsonlLogger:
         self.role = role  # who issues the environment calls (the harness reports itself)
         self.max_output_chars = max_output_chars
         self.step = 0
+        self._next_call_id = 1
+        self.parent_call_id: int | None = None  # call in progress, if any
+
+    def begin_call(self) -> int:
+        """Start a tool call: lines logged until `end_call` get this id as parent_call_id."""
+        call_id = self._next_call_id
+        self._next_call_id += 1
+        self.parent_call_id = call_id
+        return call_id
+
+    def end_call(self) -> None:
+        self.parent_call_id = None
 
     def log(
         self,
@@ -73,6 +89,7 @@ class JsonlLogger:
         output: Any,
         budget_after: int | None,
         invalid: bool = False,
+        call_id: int | None = None,
         tokens: int | None = None,
         latency: float | None = None,
     ) -> None:
@@ -92,6 +109,8 @@ class JsonlLogger:
             "seed": self.seed,
             "config_hash": self.config_hash,
             "invalid": invalid,
+            "call_id": call_id,
+            "parent_call_id": self.parent_call_id,
         }
         self.step += 1
         self._file.write(json.dumps(line, default=_json_default) + "\n")

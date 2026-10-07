@@ -129,3 +129,13 @@ the success table. The toy default budget stays 200 until Val chooses it from th
   (no `jsonschema` dependency was added). A test keeps the schemas inside that subset.
 - Dummy agent (`agent/scripted.py`): second run gets the rest of the budget minus MARGIN=5, so an
   episode where the check fails spends budget - 5 evaluations.
+
+## Review fixes before checkpoint 8
+- Config validation: `expert_penalty / K` must exceed `tol` (the "score <= tol means all matched"
+  equivalence needs it). First-success still confirms candidates with the checker.
+- Logging: `call_id` on the line a tool call writes; `parent_call_id` on every line written while
+  it ran (environment/optimizer events). Group a log by call with these.
+- Schemas declare draft 2020-12 (`$schema`); `jsonschema` is a DEV dependency only; tests check
+  the metaschema and that the runtime validator (kept) agrees with jsonschema on examples.
+- **For the agent stage:** an unexpected exception in `Episode.call` is a bug. The runner must
+  record it as `harness_error`, exclude that run from statistics and count such runs separately.

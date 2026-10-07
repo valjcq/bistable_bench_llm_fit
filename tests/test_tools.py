@@ -70,7 +70,7 @@ def test_validator_supported_keywords():
 def test_schemas_are_plain_json_and_in_the_validator_subset(cfg_toy, toy_task):
     allowed = {
         "type", "properties", "required", "additionalProperties", "enum", "minimum", "maximum",
-        "exclusiveMinimum", "items", "minItems", "maxItems", "description",
+        "exclusiveMinimum", "items", "minItems", "maxItems", "description", "$schema",
     }  # fmt: skip
 
     def keys(node):
@@ -110,10 +110,24 @@ def test_dummy_agent_completes_an_episode_with_a_complete_log(
     assert tool_names[:3] == ["get_task", "list_optimizers", "run_optimizer"]
     assert tool_names[-1] == "submit" and "check_bistability" in tool_names
     assert [e["step"] for e in events] == list(range(len(events)))
-    # evaluations: the optimizers' own, plus one per check; none left over except the margin
-    n_eval = sum(e["name"] == "evaluate" and e["role"] == "optimizer" for e in events)
-    n_check = sum(e["name"] == "check" and e["role"] == "agent" for e in events)
-    assert n_eval + n_check == ep.env.n_evaluations
+    # group by call: each tool call writes one line with its call_id; the environment events
+    # it triggered carry that id as parent_call_id and come before it
+    calls = [e for e in events if e["call_id"] is not None]
+    assert [c["call_id"] for c in calls] == list(range(1, len(calls) + 1))
+    children = {c["call_id"]: [e for e in events if e["parent_call_id"] == c["call_id"]]
+                for c in calls}  # fmt: skip
+    for c in calls:
+        assert all(e["step"] < c["step"] for e in children[c["call_id"]])
+        kinds = [e["name"] for e in children[c["call_id"]]]
+        if c["name"] == "run_optimizer":
+            want = ["evaluate"] * c["output"]["evals_used"]
+        else:
+            want = {"check_bistability": ["check"], "submit": ["final_report"]}.get(c["name"], [])
+        assert kinds == want, c["name"]
+    assert all(e["parent_call_id"] is None for e in calls)
+    assert sum(len(v) for v in children.values()) + len(calls) == len(events)  # nothing orphaned
+    n_charged = sum(e["name"] in ("evaluate", "check") for e in events)
+    assert n_charged == ep.env.n_evaluations
     n_runs = sum(n == "run_optimizer" for n, _ in rec.sent)
     # run 1 = half the budget, +1 check; a second run takes the rest minus the margin
     assert ep.env.n_evaluations == (budget // 2 + 1 if n_runs == 1 else budget - MARGIN)
@@ -122,6 +136,79 @@ def test_dummy_agent_completes_an_episode_with_a_complete_log(
     assert events[-1]["name"] == "submit" and events[-2]["name"] == "final_report"
     assert all(not e["invalid"] for e in events)
     assert [n for n, _ in rec.sent][-1] == "submit"
+
+
+def test_schemas_pass_the_official_metaschema_and_agree_with_the_runtime_validator(
+    cfg_toy, toy_task
+):
+    from jsonschema import Draft202012Validator
+
+    from bench.tools import JSON_SCHEMA_DRAFT
+
+    good = {"w": 5.0, "I": 2.0, "k": 1.0}
+    cases = {  # tool -> (valid examples, invalid examples)
+        "get_task": ([{}], [{"x": 1}, [], "s", {"params": good}]),
+        "list_optimizers": ([{}], [{"x": 1}, None]),
+        "get_budget": ([{}], [{"verbose": True}]),
+        "run_optimizer": (
+            [
+                {"name": "cma", "sim_budget": 10, "objective": "expert"},
+                {"name": "tpe", "sim_budget": 50, "objective": "naive", "init": good,
+                 "hyperparameters": {"multivariate": False}, "seed": 3},
+                {"name": "random", "sim_budget": 5.0, "objective": "naive", "init": None,
+                 "seed": None},
+            ],
+            [
+                {}, {"name": "cma", "sim_budget": 10},
+                {"name": "bogus", "sim_budget": 10, "objective": "expert"},
+                {"name": "cma", "sim_budget": 0, "objective": "expert"},
+                {"name": "cma", "sim_budget": 51, "objective": "expert"},
+                {"name": "cma", "sim_budget": 2.5, "objective": "expert"},
+                {"name": "cma", "sim_budget": True, "objective": "expert"},
+                {"name": "cma", "sim_budget": 10, "objective": "success"},
+                {"name": "cma", "sim_budget": 10, "objective": "expert", "init": {"w": 5.0}},
+                {"name": "cma", "sim_budget": 10, "objective": "expert", "init": [1, 2, 3]},
+                {"name": "cma", "sim_budget": 10, "objective": "expert", "seed": "a"},
+                {"name": "cma", "sim_budget": 10, "objective": "expert", "hyperparameters": 3},
+                {"name": "cma", "sim_budget": 10, "objective": "expert", "extra": 1},
+            ],
+        ),
+        "get_run_results": (
+            [{"run_id": "run1"}, {"run_id": "run1", "fields": ["history", "seed"]},
+             {"run_id": "run1", "fields": []}],
+            [{}, {"run_id": 1}, {"run_id": "run1", "fields": ["nope"]},
+             {"run_id": "run1", "fields": "seed"}, {"run_id": "run1", "x": 1}],
+        ),
+        "check_bistability": (
+            [{"params": good}, {"params": {"w": 0.5, "I": 10, "k": 3}}],
+            [{}, {"params": {"w": 5.0}}, {"params": {**good, "w": 20.5}},
+             {"params": {**good, "k": 0.1}}, {"params": {**good, "z": 1}},
+             {"params": {**good, "w": "5"}}, {"params": good, "x": 1}],
+        ),
+        "simulate": (
+            [{"params": good, "init_state": [0.5], "T": 100},
+             {"params": good, "init_state": [0], "T": 0.5}],
+            [{"params": good, "init_state": [0.5, 0.5], "T": 100},
+             {"params": good, "init_state": [], "T": 100},
+             {"params": good, "init_state": [0.5], "T": 0},
+             {"params": good, "init_state": [0.5], "T": -1},
+             {"params": good, "init_state": ["a"], "T": 1}, {"params": good, "init_state": [0.5]}],
+        ),
+        "submit": ([{"params": good}], [{}, {"params": {}}, {"params": None}]),
+    }  # fmt: skip
+    specs = {s["name"]: s["input_schema"] for s in _episode(cfg_toy, toy_task, 50).tool_specs()}
+    assert set(cases) == set(specs)
+    for name, schema in specs.items():
+        assert schema["$schema"] == JSON_SCHEMA_DRAFT
+        Draft202012Validator.check_schema(schema)  # the official metaschema
+        official = Draft202012Validator(schema)
+        valid, invalid = cases[name]
+        for args in valid:
+            assert official.is_valid(args), (name, args)
+            assert validate(args, schema) == [], (name, args)
+        for args in invalid:
+            assert not official.is_valid(args), (name, args)
+            assert validate(args, schema) != [], (name, args)
 
 
 def test_dummy_agent_rerun_gives_identical_logs(cfg_toy, toy_task, tmp_path):

@@ -152,6 +152,14 @@ class ExperimentConfig:
             self.task.forbid_extra_stable_states,
         ):
             raise ValueError("checker.tol / forbid_extra_stable_states must come from `task`")
+        if self.scoring.expert_penalty / self.task.K <= self.task.tol:
+            # An unmatched target adds >= penalty, so the expert score of a failing parameter set
+            # is >= penalty / K. That must exceed tol, or "score <= tol" would not mean "all
+            # targets matched" (the first-success shortcut and the docs rely on it).
+            raise ValueError(
+                f"scoring.expert_penalty / task.K = {self.scoring.expert_penalty / self.task.K} "
+                f"must exceed task.tol = {self.task.tol}"
+            )
         if len(self.scoring.naive_ic_fractions) != self.task.K:
             raise ValueError(
                 f"scoring.naive_ic_fractions needs one entry per target (K={self.task.K}), "

@@ -211,3 +211,9 @@ budget, 5 seeds (0-4) per task: 9 tasks x 5 seeds = 45 runs per condition.
 **Metrics.** Success rate with Wilson 95% intervals; success by 25/50/100% of the budget (from the
 checker-confirmed first success, as in `bench.batch`); wall-clock per run. A difference between
 two conditions is only called a difference when their Wilson intervals do not overlap.
+
+## ei_2pop budget selection: result (protocol above; selection set seeds 100-104, 3 seeds, 15 runs)
+Successes: A 2/15, 2/15, 4/15 at budgets 500/1000/2000; B-cma 11/15, 10/15, 10/15; C2-cma 14/15 at
+all three. Criterion 2 (best baseline not at 100%) holds at every budget; criterion 1 (A at most
+1 of 15) fails at every budget, so NO BUDGET QUALIFIES. Per the protocol: stop and report to Val.
+No test run was made. Data: `results/ei_selection/`.

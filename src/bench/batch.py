@@ -30,13 +30,15 @@ import glob
 import math
 import statistics
 from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from bench.checker import check
-from bench.config import ExperimentConfig, load_config
+from bench.config import BudgetConfig, ExperimentConfig, load_config
 from bench.logging import read_events
-from bench.runner import CONDITIONS, run_baseline
+from bench.runner import CONDITIONS, run_baseline, run_scripted
 from bench.tasks import Task, load_task
 
 RESULT_FIELDS = [
@@ -73,11 +75,19 @@ def final_error(metric: dict[str, Any]) -> float:
 
 
 def first_success_eval(cfg: ExperimentConfig, task: Task, events_path: Path) -> int | None:
-    """1-based index of the first evaluated point that passes the checker (see module docs)."""
+    """Evaluations spent when the first point passing the checker was evaluated (see module docs).
+
+    For a baseline this is the 1-based position of the point; for the scripted agent it also
+    counts the agent's own check calls that came before it.
+    """
     model = cfg.model()
     tol = cfg.task.tol
+    total = cfg.budget.max_evaluations
     evals = [e for e in read_events(events_path) if e["name"] == "evaluate"]
-    for i, e in enumerate(evals, start=1):
+    for e in evals:
+        i = (
+            total - e["budget_after"]
+        )  # evaluations spent once this one is done (agent checks count)
         if e["output"]["value"] > tol:
             continue  # not a candidate; a candidate must still be confirmed by the checker
         if check(model, e["arguments"]["params"], task.targets, cfg.checker).success:
@@ -86,12 +96,12 @@ def first_success_eval(cfg: ExperimentConfig, task: Task, events_path: Path) -> 
 
 
 def parse_conditions(specs: Iterable[str]) -> list[tuple[str, str | None]]:
-    """['A', 'B:cma'] -> [('A', None), ('B', 'cma')]."""
+    """['A', 'B:cma', 'S'] -> [('A', None), ('B', 'cma'), ('S', None)]. S = scripted dummy agent."""
     out = []
     for s in specs:
         cond, _, opt = s.partition(":")
-        if cond not in CONDITIONS or (cond == "A") != (opt == ""):
-            raise ValueError(f"bad condition {s!r}: use A, B:<optimizer> or C:<optimizer>")
+        if cond not in (*CONDITIONS, "S") or (cond in ("A", "S")) != (opt == ""):
+            raise ValueError(f"bad condition {s!r}: use A, S, B:<optimizer> or C:<optimizer>")
         out.append((cond, opt or None))
     return out
 
@@ -105,39 +115,59 @@ def parse_seeds(text: str) -> list[int]:
     return seeds
 
 
+def _one_run(
+    job: tuple[ExperimentConfig, Path, str, str | None, int, Path],
+) -> dict[str, Any]:
+    """Run one (task, condition, seed) and return its result row. Top-level so it can be pickled
+    for worker processes; every run is independent (own environment, own log, own seed)."""
+    cfg, task_path, condition, optimizer, seed, out_dir = job
+    task, task_id = load_task(task_path), task_path.stem
+    if condition == "S":
+        res = run_scripted(cfg, task, task_id, seed, out_dir)
+    else:
+        res = run_baseline(cfg, task, task_id, condition, seed, out_dir, optimizer)
+    metric = res["evaluation_metric"]
+    return {
+        "label": condition if optimizer is None else f"{condition}-{optimizer}",
+        "condition": condition,
+        "optimizer": res["optimizer"],
+        "task_id": task_id,
+        "seed": seed,
+        "success": metric["success"],
+        "evals_used": res["evals_used"],
+        "first_success_eval": first_success_eval(
+            cfg, task, out_dir / res["run_name"] / "events.jsonl"
+        ),
+        "budget": cfg.budget.max_evaluations,
+        "final_error": final_error(metric),
+        "wall_clock_s": round(res["wall_clock_s"], 3),
+        "run_name": res["run_name"],
+    }
+
+
 def run_batch(
     cfg: ExperimentConfig,
     task_paths: list[Path],
     conditions: list[tuple[str, str | None]],
     seeds: list[int],
     out_dir: Path,
+    jobs: int = 1,
 ) -> list[dict[str, Any]]:
-    """Run every (condition, task, seed) and return one result row per run."""
-    rows = []
-    for task_path in task_paths:
-        task, task_id = load_task(task_path), task_path.stem
-        for condition, optimizer in conditions:
-            for seed in seeds:
-                res = run_baseline(cfg, task, task_id, condition, seed, out_dir, optimizer)
-                events = out_dir / res["run_name"] / "events.jsonl"
-                metric = res["evaluation_metric"]
-                rows.append(
-                    {
-                        "label": condition if optimizer is None else f"{condition}-{optimizer}",
-                        "condition": condition,
-                        "optimizer": res["optimizer"],
-                        "task_id": task_id,
-                        "seed": seed,
-                        "success": metric["success"],
-                        "evals_used": res["evals_used"],
-                        "first_success_eval": first_success_eval(cfg, task, events),
-                        "budget": cfg.budget.max_evaluations,
-                        "final_error": final_error(metric),
-                        "wall_clock_s": round(res["wall_clock_s"], 3),
-                        "run_name": res["run_name"],
-                    }
-                )
-    return rows
+    """Run every (task, condition, seed) and return one result row per run, in that order.
+
+    With jobs > 1 the runs go to worker processes; results are identical to a serial batch
+    because runs share nothing and each is seeded by its own `seed`.
+    """
+    work = [
+        (cfg, task_path, condition, optimizer, seed, out_dir)
+        for task_path in task_paths
+        for condition, optimizer in conditions
+        for seed in seeds
+    ]
+    if jobs <= 1:
+        return [_one_run(w) for w in work]
+    with ProcessPoolExecutor(max_workers=jobs) as pool:
+        return list(pool.map(_one_run, work))
 
 
 def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -212,15 +242,21 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--conditions", nargs="+", required=True)
     ap.add_argument("--seeds", required=True, help="e.g. 0-4 or 1,5,9")
     ap.add_argument("--out", default="runs")
+    ap.add_argument("--jobs", type=int, default=1, help="parallel worker processes")
+    ap.add_argument("--budget", type=int, help="override budget.max_evaluations (recorded)")
     ap.add_argument("--csv", default="results.csv", help="results CSV (summary goes next to it)")
     args = ap.parse_args(argv)
     paths = sorted(Path(p) for pat in args.tasks for p in glob.glob(pat))
+    cfg = load_config(args.config)
+    if args.budget is not None:
+        cfg = replace(cfg, budget=BudgetConfig(args.budget))
     rows = run_batch(
-        load_config(args.config),
+        cfg,
         paths,
         parse_conditions(args.conditions),
         parse_seeds(args.seeds),
         Path(args.out),
+        args.jobs,
     )
     csv_path = Path(args.csv)
     write_csv(csv_path, rows, RESULT_FIELDS)

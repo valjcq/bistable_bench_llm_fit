@@ -131,9 +131,9 @@ def test_first_success_expert_and_naive(cfg_toy, tmp_path):
 
     def events(objective, items):
         with JsonlLogger(tmp_path / f"{objective}.jsonl", 0, "h") as lg:
-            for params, value in items:
+            for i, (params, value) in enumerate(items, start=1):
                 args = {"params": params, "objective": objective}
-                lg.log("b", "evaluate", args, {"value": value}, 0)
+                lg.log("b", "evaluate", args, {"value": value}, 200 - i)
         return tmp_path / f"{objective}.jsonl"
 
     good, bad = task.planted_params, {"w": 1.0, "I": 0.0, "k": 1.0}  # monostable: fails
@@ -185,7 +185,8 @@ def test_override_optimizer_is_recorded_in_config_and_hash(cfg_toy, small_cfg, t
 def test_batch_summary_and_parsing(small_cfg, tmp_path):
     assert parse_seeds("0-2,5") == [0, 1, 2, 5]
     assert parse_conditions(["A", "B:cma"]) == [("A", None), ("B", "cma")]
-    for bad in ("A:cma", "B", "D:cma"):
+    assert parse_conditions(["S"]) == [("S", None)]
+    for bad in ("A:cma", "B", "D:cma", "S:cma"):
         with pytest.raises(ValueError):
             parse_conditions([bad])
     rows = run_batch(
@@ -200,3 +201,11 @@ def test_batch_summary_and_parsing(small_cfg, tmp_path):
     assert [x["runs"] for x in s] == [2, 2]
     assert "| A | 2 |" in format_summary(s)
     assert final_error({"target_errors": [0.1, None]}) == pytest.approx(0.55)
+
+
+def test_parallel_batch_matches_serial(small_cfg, tmp_path):
+    args = (small_cfg, [TASKS / "toy_1pop_K2_seed4.json"], parse_conditions(["C:cma", "S"]), [0, 1])
+    serial = run_batch(*args, tmp_path / "s")
+    parallel = run_batch(*args, tmp_path / "p", jobs=2)
+    drop = lambda rows: [{k: v for k, v in r.items() if k != "wall_clock_s"} for r in rows]  # noqa: E731
+    assert drop(serial) == drop(parallel)

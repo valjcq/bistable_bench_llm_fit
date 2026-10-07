@@ -118,6 +118,49 @@ def run_baseline(
     return result
 
 
+def run_scripted(
+    cfg: ExperimentConfig, task: Task, task_id: str, seed: int, out_dir: str | Path
+) -> dict[str, Any]:
+    """Run the scripted dummy agent for one episode (condition "S"); same run directory layout."""
+    from bench.agent.scripted import run_scripted_agent  # local: keeps baseline imports light
+    from bench.tools import Episode
+
+    run_dir = Path(out_dir) / f"{task_id}__S__s{seed}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "experiment": cfg.resolved(),
+                "condition": "S",
+                "optimizer": "cma+tpe",
+                "objective": "expert",
+                "seed": seed,
+                "task": {"id": task_id, "seed": task.seed, "K": task.K,
+                         "targets": task.targets.tolist()},
+            },
+            indent=2,
+        )
+    )  # fmt: skip
+    start = time.perf_counter()
+    with JsonlLogger(run_dir / "events.jsonl", seed, cfg.hash()) as logger:
+        episode = Episode(cfg, task, seed, logger)
+        run_scripted_agent(episode)
+    result = {
+        "run_name": run_dir.name,
+        "condition": "S",
+        "optimizer": "cma+tpe",
+        "objective": "expert",
+        "seed": seed,
+        "task_id": task_id,
+        "evals_used": episode.env.n_evaluations,
+        "evaluation_metric": episode.final_metric,
+        "wall_clock_s": time.perf_counter() - start,
+        "config_hash": cfg.hash(),
+    }
+    (run_dir / "result.json").write_text(json.dumps(result, indent=2))
+    return result
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("config", help="experiment YAML, e.g. configs/exp_toy_1pop.yaml")

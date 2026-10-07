@@ -18,7 +18,7 @@ from bench.batch import (
     summarize,
     wilson_interval,
 )
-from bench.config import BudgetConfig, config_from_dict
+from bench.config import BaselineConfig, BudgetConfig, config_from_dict
 from bench.env import Environment
 from bench.logging import VOLATILE_FIELDS, JsonlLogger, comparable, read_events
 from bench.runner import run_baseline
@@ -135,11 +135,48 @@ def test_first_success_expert_and_naive(cfg_toy, tmp_path):
 
     good, bad = task.planted_params, {"w": 1.0, "I": 0.0, "k": 1.0}  # monostable: fails
     p = events("expert", [(bad, 0.7), (bad, 0.01), (good, 0.005)])
-    assert first_success_eval(cfg_toy, task, p) == 2  # expert: score <= tol IS success
+    assert first_success_eval(cfg_toy, task, p) == 3  # expert too: the checker confirms
     p = events("naive", [(bad, 0.7), (bad, 0.01), (good, 0.015)])
     assert first_success_eval(cfg_toy, task, p) == 3  # naive: point 2 is checked and fails
     p = events("naive", [(bad, 0.7), (bad, 0.01)])
     assert first_success_eval(cfg_toy, task, p) is None
+
+
+def test_a_low_average_score_is_not_taken_as_success(cfg_toy, task_toy, tmp_path):
+    """Regression: errors 0.00 and 0.03 average 0.015 <= tol but one target is out of tolerance.
+
+    The real expert objective charges an unmatched target >= penalty, so it never produces such
+    a score; the first-success computation must not rely on that and confirms with the checker.
+    """
+    env0 = Environment.from_task(cfg_toy, task_toy)
+    stable = [
+        fp.observed[0] for fp in env0.check(task_toy.planted_params).fixed_points if fp.stable
+    ]
+    low, high = min(stable), max(stable)
+    targets = np.array([[low], [high + 0.03]])  # second target is 0.03 > tol = 0.02 away
+    task = replace(task_toy, targets=targets)
+    path = tmp_path / "e.jsonl"
+    env = Environment(cfg_toy, targets, 0)
+    with JsonlLogger(path, 0, "h") as lg:
+        args = {"params": task_toy.planted_params, "objective": "expert"}
+        assert env.evaluate(task_toy.planted_params, "expert") >= 0.5  # the real score is high
+        lg.log("b", "evaluate", args, {"value": 0.015}, 0)  # the hypothetical averaged score
+    assert not env.final_report(task_toy.planted_params).success
+    assert first_success_eval(cfg_toy, task, path) is None
+
+
+def test_override_optimizer_is_recorded_in_config_and_hash(cfg_toy, small_cfg, toy_task, tmp_path):
+    assert small_cfg.baseline.optimizer == "cma"
+    res = _run(small_cfg, toy_task, "C", 0, tmp_path, "tpe")
+    saved = json.loads((tmp_path / res["run_name"] / "config.json").read_text())
+    assert saved["optimizer"] == "tpe" and saved["experiment"]["baseline"]["optimizer"] == "tpe"
+    assert res["optimizer"] == "tpe" and "C-tpe" in res["run_name"]
+    expected = replace(small_cfg, baseline=BaselineConfig("tpe")).hash()
+    assert res["config_hash"] == expected != small_cfg.hash()
+    first = read_events(tmp_path / res["run_name"] / "events.jsonl")[0]
+    assert first["config_hash"] == expected
+    with pytest.raises(ValueError):
+        _run(small_cfg, toy_task, "A", 0, tmp_path, "tpe")  # A is always random search
 
 
 def test_batch_summary_and_parsing(small_cfg, tmp_path):

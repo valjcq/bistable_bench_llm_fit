@@ -58,6 +58,10 @@ def run_baseline(
 ) -> dict[str, Any]:
     """Run one episode of a baseline condition, write its run directory, return result.json."""
     if optimizer is not None:
+        if condition == "A":
+            raise ValueError("condition A always uses random search: no optimizer choice")
+        # The override goes into cfg BEFORE anything is written, so config.json and the config
+        # hash record the optimizer actually used.
         cfg = replace(cfg, baseline=BaselineConfig(optimizer))
     opt_name, objective = condition_setup(condition, cfg.baseline.optimizer)
     run_dir = Path(out_dir) / run_name(task_id, condition, cfg.baseline.optimizer, seed)

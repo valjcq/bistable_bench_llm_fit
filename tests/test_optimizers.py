@@ -153,6 +153,14 @@ def test_random_lhs_and_hyperparameter_defaults(cfg_toy):
     assert _run(_toy_env(cfg_toy, 5), "cma", 5).hyperparameters == {"sigma0": 0.25, "popsize": None}
 
 
+def test_cma_runs_at_the_minimum_popsize(cfg_toy):
+    r = _run(_toy_env(cfg_toy, 40), "cma", 40, hyperparameters={"popsize": 4})
+    assert r.evals_used == 40 and r.hyperparameters["popsize"] == 4
+    for bad in (2, 3):
+        with pytest.raises(ValueError, match="popsize"):
+            _run(_toy_env(cfg_toy, 40), "cma", 40, hyperparameters={"popsize": bad})
+
+
 def test_specs_are_json_serializable():
     import json
 

@@ -100,3 +100,17 @@ toy budget after the first runs (as planned).
   candidates (score <= tol) are verified with the checker.
 - `config.json` in a run directory holds the resolved experiment config, targets and seed (never
   planted params); `config_from_dict(..., resolved=True)` rebuilds the config from it.
+
+## Checkpoint 6 review fixes
+- First success: score <= tol only selects candidates for BOTH objectives; the checker confirms
+  (off-budget). Note: with the real expert objective an out-of-tolerance target costs >= 1.0, so
+  an average like (0.00 + 0.03)/2 cannot occur; the regression test covers the hypothetical anyway.
+- CMA `popsize` range is [4, 200] (the cmaes library documents no minimum).
+- `--optimizer` is applied to the config before anything is written, so config.json and the config
+  hash record the optimizer used; it is an error for condition A.
+- Summary adds the fraction of runs with a confirmed first success by 25/50/100% of the budget,
+  and prints n next to the median.
+
+## Planned for checkpoint 8 (in addition to the spec)
+Toy budget sweep at 100, 200, 500, 1000 evaluations for A, B-cma, C-cma (5 tasks x 5 seeds), with
+the success table. The toy default budget stays 200 until Val chooses it from that table.

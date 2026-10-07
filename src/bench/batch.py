@@ -9,15 +9,15 @@ How the summary numbers are defined
 - success rate: fraction of runs whose SUBMITTED parameters pass the final check
   (evaluation_metric.success), with a Wilson 95% interval.
 - evals to first success: the index (1-based) of the first evaluation, in call order, whose
-  parameters pass the checker; the median is over the runs that have one. It is computed after
-  the fact from events.jsonl, not by the optimizer, and the checks done for it are NOT counted
-  against any budget (they are analysis, not part of the episode). To avoid checking every point:
-  for the expert objective, a score <= tol is equivalent to success (matched targets add at most
-  tol each, an unmatched one adds >= penalty/K > tol; test_scoring), so no checker call is needed;
-  for the naive objective, which can be fooled, only evaluations with score <= tol are candidates
-  and each candidate is verified with the checker. A naive-objective success with score > tol is
-  therefore not credited (conservative).
-  If `forbid_extra_stable_states` is on, expert candidates are verified too.
+  parameters pass the checker; the median is over the runs that have one (its n is printed). It
+  is computed after the fact from events.jsonl, not by the optimizer, and the checks done for it
+  are NOT counted against any budget (they are analysis, not part of the episode). To avoid
+  checking every point, only evaluations with score <= tol are candidates, for both objectives,
+  and each candidate is confirmed by the checker (a score is an average over targets, so it is
+  never taken as proof of success). A success whose score is > tol is therefore not credited
+  (conservative; it cannot happen with the expert objective, whose unmatched targets cost >= 1).
+- succeeded by 25% / 50% / 100% of the budget: fraction of runs whose confirmed first success
+  is at evaluation <= ceil(fraction * budget).
 - mean final error: over all runs, the mean over targets of the submitted parameters' error,
   with an unmatched target counted as 1.0 (the largest possible error for rates in [0, 1]).
 """
@@ -48,6 +48,7 @@ RESULT_FIELDS = [
     "success",
     "evals_used",
     "first_success_eval",
+    "budget",
     "final_error",
     "wall_clock_s",
     "run_name",
@@ -78,9 +79,7 @@ def first_success_eval(cfg: ExperimentConfig, task: Task, events_path: Path) -> 
     evals = [e for e in read_events(events_path) if e["name"] == "evaluate"]
     for i, e in enumerate(evals, start=1):
         if e["output"]["value"] > tol:
-            continue  # not a candidate (cannot be an expert success; not credited if naive)
-        if e["arguments"]["objective"] == "expert" and not cfg.task.forbid_extra_stable_states:
-            return i
+            continue  # not a candidate; a candidate must still be confirmed by the checker
         if check(model, e["arguments"]["params"], task.targets, cfg.checker).success:
             return i
     return None
@@ -132,6 +131,7 @@ def run_batch(
                         "success": metric["success"],
                         "evals_used": res["evals_used"],
                         "first_success_eval": first_success_eval(cfg, task, events),
+                        "budget": cfg.budget.max_evaluations,
                         "final_error": final_error(metric),
                         "wall_clock_s": round(res["wall_clock_s"], 3),
                         "run_name": res["run_name"],
@@ -148,6 +148,15 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         k = sum(r["success"] for r in rs)
         lo, hi = wilson_interval(k, len(rs))
         firsts = [r["first_success_eval"] for r in rs if r["first_success_eval"] is not None]
+        by = {
+            f"succeeded_by_{pct}pct": sum(
+                r["first_success_eval"] is not None
+                and r["first_success_eval"] <= math.ceil(pct / 100 * r["budget"])
+                for r in rs
+            )
+            / len(rs)
+            for pct in (25, 50, 100)
+        }
         out.append(
             {
                 "label": label,
@@ -156,6 +165,7 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "success_rate": k / len(rs),
                 "wilson_low": lo,
                 "wilson_high": hi,
+                **by,
                 "runs_with_a_success": len(firsts),
                 "median_evals_to_first_success": statistics.median(firsts) if firsts else None,
                 "mean_final_error": statistics.fmean(r["final_error"] for r in rs),
@@ -167,20 +177,22 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def format_summary(summary: list[dict[str, Any]]) -> str:
     """Markdown table of `summarize` output."""
     head = (
-        "| condition | runs | success rate | Wilson 95% | runs with a success | "
-        "median evals to first success | mean final error |\n|---|---|---|---|---|---|---|"
+        "| condition | runs | success rate | Wilson 95% | by 25% | by 50% | by 100% | "
+        "median evals to first success (n) | mean final error |\n"
+        "|---|---|---|---|---|---|---|---|---|"
     )
     lines = [head]
     for s in summary:
         med = (
-            "n/a"
+            "n/a (n=0)"
             if s["median_evals_to_first_success"] is None
-            else (f"{s['median_evals_to_first_success']:g}")
+            else f"{s['median_evals_to_first_success']:g} (n={s['runs_with_a_success']})"
         )
         lines.append(
             f"| {s['label']} | {s['runs']} | {s['successes']}/{s['runs']} = "
             f"{s['success_rate']:.2f} | [{s['wilson_low']:.2f}, {s['wilson_high']:.2f}] | "
-            f"{s['runs_with_a_success']} | {med} | {s['mean_final_error']:.3f} |"
+            f"{s['succeeded_by_25pct']:.2f} | {s['succeeded_by_50pct']:.2f} | "
+            f"{s['succeeded_by_100pct']:.2f} | {med} | {s['mean_final_error']:.3f} |"
         )
     return "\n".join(lines)
 

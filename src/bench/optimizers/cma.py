@@ -35,7 +35,7 @@ class CMA(Optimizer):
                 "int",
                 None,
                 "candidates per generation (null = library default 4 + 3 ln d)",
-                low=2,
+                low=4,  # the cmaes library documents no minimum; below 4 we do not trust it
                 high=200,
                 nullable=True,
             ),

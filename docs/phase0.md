@@ -153,10 +153,25 @@ Priority order a > b > c > d; each failed run counted once, non-exclusive counts
 | C-cma | 14 | 5 (5) | 4 (4) | 5 (6) | 0 (0) |
 | C-tpe | 23 | 4 (4) | 7 (7) | 10 (15) | 2 (2) |
 
-Observations: the monostable plateau is a minority (5/14 and 4/23), as before. Category (c),
-where the fixed point closest to an unmatched target is unstable, is the largest single group
-for C-tpe (10 exclusive, 15 in all) and ties the plateau for C-cma (5 exclusive, 6 in all).
-Near misses are 4 and 7. Almost nothing is left unexplained by these tests (0 and 2 in "other").
+**Reading the classification as evidence for the two v1 traps.** The expert_v1 objective has
+two structural traps, and the classes (b) and (c) are the failures they predict:
+- *Saddle on a target* (class c): when a target coincides with an unstable fixed point, v1
+  counts the target as unmatched and charges the distance to the nearest fixed point, with no
+  signal about how to make that point stable. In class (c) the fixed point nearest to an
+  unmatched target is unstable: 5 of 14 C-cma runs (6 counting overlaps) and 10 of 23 C-tpe
+  runs (15 counting overlaps).
+- *Cliff at tol* (class b): a stable state within 3 tol of an unmatched target is close, yet
+  v1 charges it the full unmatched cost (at least 1 against at most tol when matched), so
+  there is no gradient toward the last bit of accuracy. 4 of 14 C-cma and 7 of 23 C-tpe runs.
+- *Plateau* (class a, the flat monostable plateau of the earlier analysis): 5 of 14 and 4 of
+  23.
+Together (b) and (c) account for 9 of 14 failed C-cma runs and 17 of 23 failed C-tpe runs
+(exclusive counts), so the two traps are the majority of failures, and the plateau a minority.
+Only 0 and 2 runs fall in "other". This is descriptive evidence about where v1 runs end; it
+does not show that removing the traps is what makes a different objective work. expert_v2
+(section 6) was designed to remove both traps: its score at each target is continuous in the
+parameters (no tolerance, no unmatched cost) and an unstable target is penalized in
+proportion to how unstable it is. Its results are development numbers (section 6).
 
 ## 4. Per-task difficulty
 

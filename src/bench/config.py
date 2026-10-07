@@ -117,10 +117,17 @@ class BaselineConfig:
     """Settings of the scripted baselines (conditions A-C)."""
 
     optimizer: str = "cma"  # the optimizer of conditions B and C: "cma" or "tpe"
+    # Submission rule (the same for every baseline): this many evaluations are reserved from the
+    # run's own budget; at the end the top-k distinct candidates by the condition's objective
+    # are checked with the checker, and the best-scored one that passes is submitted (else the
+    # best-scored one). 0 = no reserve, submit the best-scored point (the Phase 0 rule).
+    submission_checks: int = 3
 
     def __post_init__(self) -> None:
         if self.optimizer not in ("cma", "tpe"):
             raise ValueError("baseline.optimizer must be 'cma' or 'tpe'")
+        if self.submission_checks < 0:
+            raise ValueError("baseline.submission_checks must be >= 0")
 
 
 def _section(cls: type, raw: dict[str, Any] | None, name: str, **extra: Any) -> Any:

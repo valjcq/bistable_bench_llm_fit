@@ -18,11 +18,12 @@ from __future__ import annotations
 import argparse
 import json
 import time
+from collections.abc import Callable
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
 
-from bench.config import BaselineConfig, ExperimentConfig, load_config
+from bench.config import ExperimentConfig, load_config
 from bench.env import Environment
 from bench.logging import JsonlLogger
 from bench.optimizer_runs import RunRegistry
@@ -50,6 +51,32 @@ def run_name(task_id: str, condition: str, optimizer: str, seed: int) -> str:
     return f"{task_id}__{label}__s{seed}"
 
 
+def choose_submission(
+    scored: list[tuple[float, dict[str, float]]],
+    k: int,
+    passes: Callable[[dict[str, float]], bool],
+) -> tuple[dict[str, float], dict[str, Any]]:
+    """The submission rule shared by every baseline.
+
+    `scored` is every evaluated (score, params) in call order. Take the k best DISTINCT
+    parameter sets by score (ties: earliest first), test each with `passes` (the checker), and
+    submit the best-scored one that passes; if none does, the best-scored one. With k = 0 no
+    test is made and the best-scored point is submitted. Returns (params, report).
+    """
+    ranked: list[tuple[float, dict[str, float]]] = []
+    seen = set()
+    for score, params in sorted(scored, key=lambda sp: sp[0]):  # stable: earliest first on ties
+        key = tuple(sorted(params.items()))
+        if key not in seen:
+            seen.add(key)
+            ranked.append((score, params))
+    top = ranked[: max(k, 1)]
+    passed = [passes(p) for _, p in top] if k > 0 else []
+    chosen = next((i for i, ok in enumerate(passed) if ok), 0)
+    report = {"k": k, "scores": [s for s, _ in top], "passed": passed, "chosen_rank": chosen}
+    return top[chosen][1], report
+
+
 def run_baseline(
     cfg: ExperimentConfig,
     task: Task,
@@ -65,7 +92,7 @@ def run_baseline(
             raise ValueError("condition A always uses random search: no optimizer choice")
         # The override goes into cfg BEFORE anything is written, so config.json and the config
         # hash record the optimizer actually used.
-        cfg = replace(cfg, baseline=BaselineConfig(optimizer))
+        cfg = replace(cfg, baseline=replace(cfg.baseline, optimizer=optimizer))
     opt_name, objective = condition_setup(condition, cfg.baseline.optimizer)
     run_dir = Path(out_dir) / run_name(task_id, condition, cfg.baseline.optimizer, seed)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -90,9 +117,17 @@ def run_baseline(
 
     start = time.perf_counter()
     with JsonlLogger(run_dir / "events.jsonl", seed, cfg.hash()) as logger:
-        env = Environment.from_task(cfg, task, event_hook=logger.env_hook)
+        scored: list[tuple[float, dict[str, float]]] = []
+
+        def hook(event: dict[str, Any]) -> None:
+            logger.env_hook(event)
+            if event["event"] == "evaluate":
+                scored.append((event["value"], event["params"]))
+
+        env = Environment.from_task(cfg, task, event_hook=hook)
         registry = RunRegistry(env, episode_seed=seed)
-        budget = env.budget_remaining
+        k = cfg.baseline.submission_checks
+        budget = env.budget_remaining - k  # k evaluations are kept for the submission checks
         call_id = logger.begin_call()  # the evaluations below get this as parent_call_id
         run = registry.run(opt_name, objective, budget)
         logger.end_call()
@@ -104,7 +139,13 @@ def run_baseline(
             env.budget_remaining,
             call_id=call_id,
         )
-        metric = env.final_report(run.best_params)  # the submission
+        select_id = logger.begin_call()
+        logger.role = "harness"  # the checks are the harness's, not the optimizer's
+        submitted, report = choose_submission(scored, k, lambda p: env.check(p).success)
+        logger.end_call()
+        logger.log("harness", "select_submission", {"k": k}, report, env.budget_remaining,
+                   call_id=select_id)  # fmt: skip
+        metric = env.final_report(submitted)  # the submission
     result = {
         "run_name": run_dir.name,
         "condition": condition,
@@ -114,6 +155,7 @@ def run_baseline(
         "task_id": task_id,
         "evals_used": env.n_evaluations,
         "evaluation_metric": asdict(metric),
+        "submission": report,
         "wall_clock_s": time.perf_counter() - start,
         "config_hash": cfg.hash(),
     }

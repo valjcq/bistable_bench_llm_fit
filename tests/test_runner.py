@@ -21,7 +21,7 @@ from bench.batch import (
 from bench.config import BaselineConfig, BudgetConfig, config_from_dict
 from bench.env import Environment
 from bench.logging import VOLATILE_FIELDS, JsonlLogger, comparable, read_events
-from bench.runner import run_baseline
+from bench.runner import choose_submission, run_baseline
 from bench.tasks import load_task
 
 TASKS = Path(__file__).resolve().parents[1] / "tasks"
@@ -54,14 +54,15 @@ def test_run_writes_a_complete_log(small_cfg, toy_task, tmp_path, cond, opt):
     assert all(set(e) == FIELDS for e in events)
     assert [e["step"] for e in events] == list(range(len(events)))
     names = [e["name"] for e in events]
-    assert names.count("evaluate") == 40 == res["evals_used"]
-    assert names[-2:] == ["run_optimizer", "final_report"]
-    assert events[-1]["role"] == "harness" and events[-1]["output"]["metric"]["success"] in (
-        True, False,
-    )  # fmt: skip
+    # submission rule: 3 evaluations reserved from the 40, spent on checker calls at the end
+    assert names.count("evaluate") == 37 and names.count("check") == 3 == res["evals_used"] - 37
+    assert names[-6:] == ["run_optimizer", "check", "check", "check", "select_submission",
+                          "final_report"]  # fmt: skip
+    assert {e["role"] for e in events if e["name"] == "check"} == {"harness"}
+    assert events[-1]["role"] == "harness"
     # the budget counts down by one per evaluation and ends at zero
     ev = [e for e in events if e["name"] == "evaluate"]
-    assert [e["budget_after"] for e in ev] == list(range(39, -1, -1))
+    assert [e["budget_after"] for e in ev] == list(range(39, 2, -1))  # 3 stay reserved
     assert {e["seed"] for e in events} == {1} and len({e["config_hash"] for e in events}) == 1
     assert all(e["tokens"] is None and e["latency"] is None for e in events)
     result = json.loads((d / "result.json").read_text())
@@ -102,10 +103,40 @@ def test_run_is_reconstructible_from_events_and_config(small_cfg, toy_task, tmp_
     assert {e["parent_call_id"] for e in ev} == {run_line["call_id"]}  # grouped by call
     for e in ev:  # every logged score is reproduced by a fresh environment
         assert env.evaluate(e["arguments"]["params"], saved["objective"]) == e["output"]["value"]
-    best = min(ev, key=lambda e: e["output"]["value"])  # first minimum = the submitted point
-    metric = env.final_report(best["arguments"]["params"])
+    sel = next(e for e in all_events if e["name"] == "select_submission")
+    ranked = sorted(ev, key=lambda e: e["output"]["value"])  # stable: earliest first on ties
+    top = list({tuple(sorted(e["arguments"]["params"].items())): e for e in ranked}.values())[:3]
+    chosen = top[sel["output"]["chosen_rank"]]  # the rule's pick, from the logged ranking
+    assert [e["output"]["value"] for e in top] == sel["output"]["scores"]
+    metric = env.final_report(chosen["arguments"]["params"])
     assert metric.success == res["evaluation_metric"]["success"]
     assert metric.target_errors == res["evaluation_metric"]["target_errors"]
+
+
+def test_choose_submission_rule():
+    a, b, c, d = ({"x": float(i)} for i in range(4))
+    scored = [(0.5, c), (0.1, a), (0.1, a), (0.3, b), (0.9, d), (0.1, a)]  # a evaluated 3 times
+    ok = {0.0: False, 1.0: True, 2.0: True, 3.0: True}  # pass/fail by params["x"]
+    passes = lambda p: ok[p["x"]]  # noqa: E731
+    # top-3 DISTINCT by score: a (0.1), b (0.3), c (0.5); a fails, b passes -> b
+    chosen, rep = choose_submission(scored, 3, passes)
+    assert chosen == b and rep["scores"] == [0.1, 0.3, 0.5] and rep["passed"] == [False, True, True]
+    assert rep["chosen_rank"] == 1
+    # d would pass but is outside the top 3: never considered
+    ok.update({1.0: False, 2.0: False})
+    chosen, rep = choose_submission(scored, 3, passes)
+    assert chosen == a and rep["chosen_rank"] == 0 and rep["passed"] == [False] * 3  # none: best
+    chosen, rep = choose_submission(scored, 0, passes)  # k = 0: the old rule, no checks at all
+    assert chosen == a and rep["passed"] == []
+    assert choose_submission([(0.2, a)], 3, passes)[1]["scores"] == [0.2]  # fewer than k
+
+
+def test_k0_reproduces_the_old_submission_rule(small_cfg, toy_task, tmp_path):
+    cfg0 = replace(small_cfg, baseline=replace(small_cfg.baseline, submission_checks=0))
+    res = _run(cfg0, toy_task, "C", 0, tmp_path)
+    ev = [e for e in read_events(tmp_path / res["run_name"] / "events.jsonl")]
+    assert [e["name"] for e in ev].count("evaluate") == 40 == res["evals_used"]
+    assert res["submission"]["passed"] == [] and cfg0.hash() != small_cfg.hash()
 
 
 def test_large_outputs_are_replaced_by_their_hash(tmp_path):
@@ -216,6 +247,6 @@ def test_condition_c2_uses_expert_v2_and_confirms_every_point(small_cfg, toy_tas
     d = tmp_path / res["run_name"]
     assert res["objective"] == "expert_v2" and "C2-cma" in res["run_name"]
     ev = [e for e in read_events(d / "events.jsonl") if e["name"] == "evaluate"]
-    assert {e["arguments"]["objective"] for e in ev} == {"expert_v2"} and len(ev) == 40
+    assert {e["arguments"]["objective"] for e in ev} == {"expert_v2"} and len(ev) == 37
     # expert_v2 scores are not on the tol scale: first success must not assume score <= tol
     first_success_eval(small_cfg, toy_task, d / "events.jsonl")  # runs without error

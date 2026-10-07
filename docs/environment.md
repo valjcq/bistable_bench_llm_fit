@@ -63,7 +63,13 @@ $\theta$ is fixed in both models: only $I-\theta$ matters, so freeing both would
 | free, log scale | $k$ [0.2, 3] | none |
 | fixed | $\tau=10$, $r_{max}=1$, $\theta=5$ | $\tau_E=10$, $\tau_I=5$, $\theta=5$ (both), $k=1$ (both), $r_{max}=1$ (both) |
 
-Bounds are generic, not taken from a paper. Observing E only is *partial observation*: targets say nothing about I. A 3-population selective model is a placeholder in `instances.py`, not implemented.
+**Generalized form (Wilson-Cowan).** The dynamics are really
+
+$$\tau_i \dot r_i = -r_i + (\kappa_i - \rho_i\, r_i)\, S_i(u_i),$$
+
+with a refractory coefficient $\rho_i$ (`rref`, default 0) and amplitude $\kappa_i$ (the field `r_max`). With $\rho=0$, $\kappa=r_{max}$ and the logistic $S$ this is exactly the model above (a golden-file test checks the toy and `ei_2pop` bit for bit). The second sigmoid variant, `wc_shifted`, is Wilson & Cowan's eq. 15, $S(x)=\sigma(a(x-\theta))-\sigma(-a\theta)$ with $a=1/k$, so $S(0)=0$. The Jacobian gains the term $-\mathrm{diag}(\rho\, S(u))$. **State bounds are given by the model**, not assumed to be $[0,r_{max}]$: $r\in[\ell,h]$ with $\ell=\kappa S_{min}/(1+\rho S_{min})$, $h=\kappa S_{max}/(1+\rho S_{max})$ (derivation in the docstring of `state_bounds`); for the logistic models this is the old box, for Wilson-Cowan $E$ may dip slightly below 0 and tops out near 0.48. The 1-D scan, the global search box, the unobserved-population solve of the expert objective, the naive objective's initial conditions and the planting window (a fraction of the feasible range) all use these bounds. The `wc1972` instance (`configs/wc1972.yaml`, k = S(+inf); `wc1972_k1.yaml`, k = 1; the paper's parameter sets in `configs/wc1972_paper_sets.yaml`) and its model card are in [model_cards/wilson_cowan_1972.md](model_cards/wilson_cowan_1972.md). No Wilson-Cowan task generation or benchmark runs exist yet.
+
+Bounds are generic, not taken from a paper (except `wc1972`). Observing E only is *partial observation*: targets say nothing about I. A 3-population selective model is a placeholder in `instances.py`, not implemented.
 
 ## 5. What a task is
 
@@ -71,7 +77,7 @@ A task is **K = 2 target states**, each a vector over the observed populations, 
 
 **Planting.** To guarantee a solution exists, `make_task` draws random parameters until they have enough usable stable states, and uses K of those states as targets. In order:
 
-1. Cheap prefilter: a multi-start search with 16 starts; keep stable states whose observed rates lie in **[0.05, 0.95]·r_max**. Near 0 or $r_{max}$ the sigmoid is flat, so a 0.02 tolerance there is meaningless.
+1. Cheap prefilter: a multi-start search with 16 starts; keep stable states whose observed rates lie in the **5%–95% window of the feasible range** (`[0.05, 0.95]·r_max` for the logistic models). Near either end the sigmoid is flat, so a 0.02 tolerance there is meaningless.
 2. Pick K states pairwise more than **3·tol = 0.06** apart (max abs difference), so tolerance boxes stay distinct.
 3. Optionally add Gaussian noise (`noise`, default 0), then recheck window and separation.
 4. Run the full check on the planted parameters against the final targets. It must succeed.
@@ -224,7 +230,8 @@ The centre of the box is monostable: one stable state at (0.5, 0.5). One target 
 **`src/bench/`**
 - `models/base.py`: `ParamSpec`, `ParamSpace` (bounds, log scale, unit-cube mapping), `NetArrays`.
 - `models/rate_network.py`: $F$, $F'$, `rhs`, residual and Jacobians, `RateNetwork`.
-- `models/instances.py`: builders (`toy_1pop`, `ei_2pop`), builder registry, YAML loader.
+- `models/instances.py`: builders (`toy_1pop`, `ei_2pop`, `wc1972`), builder registry, YAML loader.
+- `models/wc1972.py`: the paper's parameter sets and a P-sweep helper for `wc1972`.
 - `checker.py`: fixed-point search, stability, matching, `check`, `CheckResult`.
 - `simulate.py`: RK4, `simulate`, `simulate_batch`.
 - `scoring.py`: the three scores.
@@ -233,7 +240,7 @@ The centre of the box is monostable: one stable state at (0.5, 0.5). One target 
 - `tasks.py`: planting, task files, CLI.
 - `config.py`: typed config sections, hashes.
 
-**`configs/`**: `toy_1pop.yaml`, `ei_2pop.yaml` (models); `exp_toy_1pop.yaml`, `exp_ei_2pop.yaml` (experiments).
+**`configs/`**: `toy_1pop.yaml`, `ei_2pop.yaml`, `wc1972.yaml`, `wc1972_k1.yaml`, `wc1972_paper_sets.yaml` (models and parameter sets); `exp_toy_1pop.yaml`, `exp_ei_2pop.yaml` (experiments).
 **`tasks/`**: 5 toy and 10 `ei_2pop` task files.
 **`tests/`**: `conftest.py` (fixtures), `test_model.py`, `test_checker.py`, `test_checker_nd.py`, `test_scoring.py`, `test_budget_env.py`, `test_tasks.py`, `test_config.py`, `test_determinism.py`.
 

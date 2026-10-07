@@ -239,3 +239,16 @@ only when the Wilson intervals do not overlap", no change after seeing test resu
 ## ei_2pop test: done
 Run as amended; report in `docs/ei2pop_test.md`, data in `results/ei_test/`. C-cma (expert_v2)
 44/45, B-cma 36/45, C-tpe 35/45, B-tpe 31/45, A 8/45. Nothing changed after seeing the results.
+
+## Wilson-Cowan 1972 (model layer only; no task generation, budgets or benchmark runs yet)
+- `RateNetwork` now implements tau dr/dt = -r + (amp - rref r) S(u), S "logistic" or "wc_shifted"
+  (card eq. 15); amp is the field `r_max`. Logistic models are bit-identical (golden test).
+- State bounds come from the model (`state_bounds`); for WC they use the true asymptote S(+inf)
+  (tight), not k, so with k = 1 hi = S_max / (1 + S_max) is slightly below 1/2. WC states can be
+  slightly negative; the planting window is a fraction of the feasible range.
+- Instance: `configs/wc1972.yaml` (k = S(+inf), 8 free parameters in the card's box, P = Q = 0,
+  tau_e = tau_i = 10, rref = 1), `wc1972_k1.yaml` (k = 1), `wc1972_paper_sets.yaml` (Figs. 4/5, 6,
+  7/8, 11; not Fig. 10, card ambiguity 4). Tests: `tests/test_wc1972.py`, markers `paper` and
+  `computed`; the checker reproduces the card's P intervals exactly for both k choices.
+- Needs a design decision before WC tasks: tolerance on the WC range (E tops out near 0.48), and
+  avoiding tasks solvable by remembering the paper's parameter values.

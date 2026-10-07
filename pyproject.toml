@@ -29,6 +29,10 @@ bench = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "paper: qualitative claims of a paper reproduced by the model (Wilson-Cowan 1972)",
+    "computed: regression on values we recomputed from the paper's equations",
+]
 
 [tool.ruff]
 line-length = 100

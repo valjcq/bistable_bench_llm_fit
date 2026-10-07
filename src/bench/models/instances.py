@@ -68,6 +68,38 @@ def build_ei_2pop(p: Mapping[str, float]) -> NetArrays:
     )
 
 
+def build_wc1972(p: Mapping[str, float]) -> NetArrays:
+    """Structure rule for Wilson & Cowan (1972), eqs. 11, 12 and 15 (population order: E, I).
+
+        tau_e dE/dt = -E + (k_e - r_e E) S_e(c1 E - c2 I + P)
+        tau_i dI/dt = -I + (k_i - r_i I) S_i(c3 E - c4 I + Q)
+        S(x) = 1 / (1 + exp(-a (x - theta))) - 1 / (1 + exp(a theta))
+
+    Parameters (names as in the model card): c1..c4 (synapse counts, all positive; the signs
+    are applied here), a_e, theta_e, a_i, theta_i (slope and position of the sigmoids), inputs
+    P and Q, time constants tau_e, tau_i, refractory coefficients rref_e, rref_i (the paper's
+    r_e, r_i, set to 1). k_e, k_i, the maximum of the response, are not given by the paper as a
+    formula; by default k = S(+inf) = 1 - 1/(1 + exp(a theta)) (the card's interpretation). Put
+    `k_e` and `k_i` among the fixed parameters to use another value (the card's alternative is 1).
+
+    Mapping onto NetArrays: the sigmoid width is k = 1 / a, the amplitude `r_max` is the card's
+    k, and `rref` is r. The shifted sigmoid is the "wc_shifted" variant.
+    """
+    a = np.array([p["a_e"], p["a_i"]])
+    theta = np.array([p["theta_e"], p["theta_i"]])
+    k_card = np.array([p["k_e"], p["k_i"]]) if "k_e" in p else 1.0 - 1.0 / (1.0 + np.exp(a * theta))
+    return NetArrays(
+        W=np.array([[p["c1"], -p["c2"]], [p["c3"], -p["c4"]]]),
+        I_ext=np.array([p["P"], p["Q"]]),
+        tau=np.array([p["tau_e"], p["tau_i"]]),
+        theta=theta,
+        k=1.0 / a,
+        r_max=k_card,
+        rref=np.array([p["rref_e"], p["rref_i"]]),
+        variant="wc_shifted",
+    )
+
+
 # Placeholder (NOT implemented, out of scope for now): 3-pop selective model with
 # populations (E1, E2, I) and structured parameters w_plus (same-selectivity E->E),
 # w_minus (cross-selectivity E->E), plus the E->I / I->E / I->I weights. It will be a
@@ -76,6 +108,7 @@ def build_ei_2pop(p: Mapping[str, float]) -> NetArrays:
 BUILDERS: dict[str, Callable[[Mapping[str, float]], NetArrays]] = {
     "toy_1pop": build_toy_1pop,
     "ei_2pop": build_ei_2pop,
+    "wc1972": build_wc1972,
 }
 
 

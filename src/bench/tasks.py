@@ -22,6 +22,7 @@ import numpy as np
 
 from bench.checker import check, find_stable_states
 from bench.config import ExperimentConfig, load_config
+from bench.models.rate_network import RateNetwork
 
 
 class TaskGenerationError(RuntimeError):
@@ -101,6 +102,21 @@ def _pick_separated(
     return None
 
 
+def target_window_bounds(
+    model: RateNetwork, params: dict[str, float], window: tuple[float, float]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Absolute (lo, hi) of the planting window for the observed populations.
+
+    `window` = (f_lo, f_hi) are fractions (default 5% to 95%) of the FEASIBLE range of each
+    observed population, i.e. of the model's state bounds (`RateNetwork.state_bounds`): the
+    logistic models give [0, r_max], so the window is f * r_max as before; Wilson-Cowan gives
+    its own, slightly asymmetric range (E may dip a little below 0).
+    """
+    b_lo, b_hi = model.state_bounds(params)
+    b_lo, b_hi = b_lo[model.observed_idx], b_hi[model.observed_idx]
+    return b_lo + window[0] * (b_hi - b_lo), b_lo + window[1] * (b_hi - b_lo)
+
+
 def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None = None) -> Task:
     """Plant a task: draw parameters until they have >= K usable stable states.
 
@@ -129,12 +145,7 @@ def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None =
 
     for attempt in range(1, tc.max_attempts + 1):
         params = model.space.from_unit(rng.random(model.space.dim))
-        # The window is a fraction of the FEASIBLE range of the observed populations (the model's
-        # state bounds; [0, r_max] for the logistic models).
-        b_lo, b_hi = model.state_bounds(params)
-        b_lo, b_hi = b_lo[model.observed_idx], b_hi[model.observed_idx]
-        lo = b_lo + tc.target_window[0] * (b_hi - b_lo)
-        hi = b_lo + tc.target_window[1] * (b_hi - b_lo)
+        lo, hi = target_window_bounds(model, params, tc.target_window)
 
         def in_window(rows: np.ndarray, lo: np.ndarray = lo, hi: np.ndarray = hi) -> bool:
             return bool(np.all((rows >= lo) & (rows <= hi)))

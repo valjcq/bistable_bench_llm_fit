@@ -47,9 +47,11 @@ class CMA(Optimizer):
     ) -> None:
         x0 = np.full(d, 0.5) if init is None else init
         # Optuna 5 deprecates x0/sigma0 (removal in v6) but still supports them; we pin 5.0.0,
-        # so silence the warning here instead of letting it flood every run.
+        # so silence just these two warnings (by category and message) here.
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
+            warnings.filterwarnings(
+                "ignore", message=r".*`(x0|sigma0)`.*deprecated", category=FutureWarning
+            )
             sampler = CmaEsSampler(
                 x0={f"x{i}": float(v) for i, v in enumerate(x0)},
                 sigma0=hp["sigma0"],

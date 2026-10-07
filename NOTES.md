@@ -69,3 +69,21 @@ Budget-matched: every condition gets the same evaluation budget.
 | E | same agent, closed API model | chosen by the agent |
 
 At the end of a baseline episode (A-C) the best parameters by the condition's objective are submitted.
+- Optuna v6 removes x0/sigma0 from CmaEsSampler; upgrading requires changing cma.py.
+
+## Baseline settings
+Default hyperparameters (spec defaults, ranges in brackets). Used unchanged by conditions A-C and
+MUST NOT change once experiments start. The agent (D-E) sees them as defaults in list_optimizers()
+and may override any of them within the spec ranges, at the cost of budget.
+- random: sampling = "uniform" ["uniform", "lhs"]
+- tpe: n_startup_trials = 10 [1, 1000]; multivariate = True [True, False]
+- cma: sigma0 = 0.25 [0.01, 0.5]; popsize = null = library default 4 + 3 ln d [null or 2..200]
+
+## Possible later option (not built)
+An automated-tuning baseline (a fixed sweep over a few settings per optimizer, budget-matched), to
+answer "would simple automatic tuning match the agent?".
+
+## Observation from the checkpoint 5 smoke test
+Expert objective, budget 200, toy tasks seed0-4, 5 seeds each (successes / 5): random 1,0,0,0,0;
+tpe 0,0,0,0,2; cma 1,1,2,0,2. Condition B/C on the toy is hard at 200 evaluations; revisit the
+toy budget after the first runs (as planned).

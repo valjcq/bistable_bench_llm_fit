@@ -14,7 +14,9 @@ from bench.env import Environment
 from bench.optimizer_runs import RunRegistry, derive_seed
 from bench.optimizers import OPTIMIZERS
 from bench.optimizers.base import is_converged
+from bench.tasks import load_task
 
+TASKS = Path(__file__).resolve().parents[1] / "tasks"
 NAMES = sorted(OPTIMIZERS)  # cma, random, tpe
 
 
@@ -40,13 +42,21 @@ def test_unit_cube_objective_needs_no_environment():
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_solves_the_toy_target_for_at_least_one_seed(cfg_toy, name):
+def test_solves_a_committed_toy_task_within_budget(cfg_toy, name):
+    """Smoke test on the frozen, in-window toy tasks: >= 1 success in 5 seeds x 5 tasks.
+
+    A single task is not a stable bar: with budget 200 each optimizer solves some tasks and
+    fails others (the expert objective is flat in monostable regions), so the bar is "solves at
+    least one (task, seed) pair", which still catches a broken wrapper.
+    """
     hits = []
-    for seed in range(5):
-        env = _toy_env(cfg_toy)
-        r = _run(env, name, 200, seed=seed)
-        hits.append(env.final_report(r.best_params).success)
-    assert any(hits), f"{name} never solved the toy target in 5 seeds: {hits}"
+    for t in range(5):
+        task = load_task(TASKS / f"toy_1pop_K2_seed{t}.json")
+        for seed in range(5):
+            env = Environment.from_task(cfg_toy, task)
+            r = _run(env, name, 200, seed=seed)
+            hits.append(env.final_report(r.best_params).success)
+    assert any(hits), f"{name} never solved a toy task: {hits}"
 
 
 @pytest.mark.parametrize("name", NAMES)

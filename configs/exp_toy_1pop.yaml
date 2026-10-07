@@ -26,3 +26,6 @@ scoring:
 
 budget:
   max_evaluations: 200
+
+baseline:
+  optimizer: cma  # optimizer of conditions B and C ("cma" or "tpe")

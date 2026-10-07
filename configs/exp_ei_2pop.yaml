@@ -25,4 +25,7 @@ scoring:
   expert_penalty: 1.0
 
 budget:
-  max_evaluations: 200
+  max_evaluations: 1000
+
+baseline:
+  optimizer: cma  # optimizer of conditions B and C ("cma" or "tpe")

@@ -87,3 +87,16 @@ answer "would simple automatic tuning match the agent?".
 Expert objective, budget 200, toy tasks seed0-4, 5 seeds each (successes / 5): random 1,0,0,0,0;
 tpe 0,0,0,0,2; cma 1,1,2,0,2. Condition B/C on the toy is hard at 200 evaluations; revisit the
 toy budget after the first runs (as planned).
+
+## Logging, runner, batch (checkpoint 6)
+- Budgets are now placeholders: toy 200, ei_2pop 1000 (`budget.max_evaluations` in the exp
+  configs). Experiment configs have a `baseline: {optimizer: cma|tpe}` section (B and C use it;
+  `--optimizer` overrides it per run). It is part of the config hash.
+- Log format and the "same run" rule (ignore only timestamp and latency): `src/bench/logging.py`.
+  `Environment` events now carry `budget_remaining`.
+- Summary definitions (success rate, first success and whether its checks are counted, mean final
+  error): docstring of `src/bench/batch.py`. Short version: first-success checks are post-hoc
+  analysis and are NOT counted against the budget; expert score <= tol is itself success, naive
+  candidates (score <= tol) are verified with the checker.
+- `config.json` in a run directory holds the resolved experiment config, targets and seed (never
+  planted params); `config_from_dict(..., resolved=True)` rebuilds the config from it.

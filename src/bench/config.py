@@ -8,6 +8,7 @@ An experiment file has these sections (all but `model` optional, defaults below)
     simulator: RK4 settings and the default time horizon T
     scoring:   settings of the naive / expert objectives
     budget:    number of allowed evaluations
+    baseline:  which optimizer conditions B and C use
 
 Every section is checked strictly: an unknown key (usually a typo) is an error, so a config
 can never silently run with a setting that was meant to be something else.
@@ -105,6 +106,17 @@ class ScoringConfig:
             raise ValueError("scoring.expert_penalty must be > 0")
 
 
+@dataclass(frozen=True)
+class BaselineConfig:
+    """Settings of the scripted baselines (conditions A-C)."""
+
+    optimizer: str = "cma"  # the optimizer of conditions B and C: "cma" or "tpe"
+
+    def __post_init__(self) -> None:
+        if self.optimizer not in ("cma", "tpe"):
+            raise ValueError("baseline.optimizer must be 'cma' or 'tpe'")
+
+
 def _section(cls: type, raw: dict[str, Any] | None, name: str, **extra: Any) -> Any:
     """Build dataclass `cls` from a raw YAML dict, rejecting unknown keys and lists->tuples."""
     raw = dict(raw or {})
@@ -131,6 +143,7 @@ class ExperimentConfig:
     simulator: SimulatorConfig = field(default_factory=SimulatorConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
+    baseline: BaselineConfig = field(default_factory=BaselineConfig)
 
     def __post_init__(self) -> None:
         self.model()  # validates the model spec (raises on a bad one)
@@ -158,6 +171,7 @@ class ExperimentConfig:
             "simulator": asdict(self.simulator),
             "scoring": asdict(self.scoring),
             "budget": asdict(self.budget),
+            "baseline": asdict(self.baseline),
         }
         return json.loads(json.dumps(d))  # tuples -> lists, so the form is canonical
 
@@ -185,18 +199,28 @@ def _hash(obj: Any) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def load_config(path: str | Path) -> ExperimentConfig:
-    """Read an experiment YAML (and the model YAML it points to) into an ExperimentConfig."""
-    path = Path(path)
-    raw = yaml.safe_load(path.read_text())
-    unknown = set(raw) - {"model", "task", "checker", "simulator", "scoring", "budget"}
+def config_from_dict(
+    raw: dict[str, Any], model_spec: dict[str, Any], resolved: bool = False
+) -> ExperimentConfig:
+    """Build an ExperimentConfig from the raw sections of an experiment file.
+
+    With `resolved=True`, `raw` is the output of `ExperimentConfig.resolved()` (that is how a run
+    directory's config is turned back into a config); the checker's tol /
+    forbid_extra_stable_states keys, which `resolved()` repeats from `task`, are then ignored.
+    In a hand-written file they stay an error.
+    """
+    unknown = set(raw) - {"model", "task", "checker", "simulator", "scoring", "budget", "baseline"}
     if unknown:
         raise ValueError(f"unknown top-level key(s): {sorted(unknown)}")
-    model_spec = yaml.safe_load((path.parent / raw["model"]).read_text())
     task = _section(TaskConfig, raw.get("task"), "task")
+    checker_raw = {
+        k: v
+        for k, v in (raw.get("checker") or {}).items()
+        if not (resolved and k in ("tol", "forbid_extra_stable_states"))
+    }
     checker = _section(
         CheckerConfig,
-        raw.get("checker"),
+        checker_raw,
         "checker",
         tol=task.tol,
         forbid_extra_stable_states=task.forbid_extra_stable_states,
@@ -208,4 +232,13 @@ def load_config(path: str | Path) -> ExperimentConfig:
         simulator=_section(SimulatorConfig, raw.get("simulator"), "simulator"),
         scoring=_section(ScoringConfig, raw.get("scoring"), "scoring"),
         budget=_section(BudgetConfig, raw.get("budget"), "budget"),
+        baseline=_section(BaselineConfig, raw.get("baseline"), "baseline"),
     )
+
+
+def load_config(path: str | Path) -> ExperimentConfig:
+    """Read an experiment YAML (and the model YAML it points to) into an ExperimentConfig."""
+    path = Path(path)
+    raw = yaml.safe_load(path.read_text())
+    model_spec = yaml.safe_load((path.parent / raw["model"]).read_text())
+    return config_from_dict({k: v for k, v in raw.items() if k != "model"}, model_spec)

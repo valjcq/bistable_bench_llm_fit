@@ -224,6 +224,7 @@ class Environment:
                 {
                     "event": event,
                     "index": index,
+                    "budget_remaining": self._budget.remaining,
                     "params": {k: float(v) for k, v in params.items()},
                     **data,
                 }

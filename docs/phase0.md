@@ -1,5 +1,11 @@
 # Phase 0 validation (no LLM)
 
+> **Produced at git tag `phase0-expert-v1`.** All Phase 0 results below used the first expert
+> objective (`expert_v1`; "expert" and condition C mean v1, C2 means v2), which was later removed:
+> see [decisions/0001-expert-objective.md](decisions/0001-expert-objective.md). Test names and
+> commands cited in this page refer to the code at that tag (`git checkout phase0-expert-v1`);
+> the results files are in `results/phase0/` (see its README).
+
 Everything here comes from runs committed under [results/phase0/](../results/phase0/) (CSV per
 run, summary per table, produced by `python -m bench.batch`; commands at the end). Run
 directories with full logs are in `runs/phase0/` (git-ignored). Settings: toy budget 200

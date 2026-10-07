@@ -122,20 +122,25 @@ Fixed-step RK4, `dt = 0.1`. Fixed steps keep results bit-reproducible: no step-s
 | Score | What it is | Used by |
 |---|---|---|
 | `naive_objective` | simulate from a low and a high start (fractions [0.0, 1.0] of $r_{max}$, all populations), mean error of end states to targets, paired in sorted order. One evaluation. | optimizers (`evaluate(..., "naive")`) |
-| `expert_v1_objective` | from the checker: matched target adds its real error; unmatched adds distance to the nearest fixed point of any kind + penalty 1.0; mean over targets. All matched ⇒ ≤ tol; each unmatched ⇒ ≥ 1.0/K. | optimizers (`"expert_v1"`) |
-| `expert_v2_objective` | candidate replacement of v1, no checker call: each target is completed to a full state; score = mean of (fixed-point residual + lambda * instability). Zero when every target is a stable fixed point. Definition in [NOTES.md](../NOTES.md); results in [phase0.md](phase0.md). | optimizers (`"expert_v2"`) |
+| `expert_v2_objective` | for each target, ask "is this state a stable fixed point of these parameters?" and measure how far it is from yes; mean over targets. One evaluation, no checker call. | optimizers (`"expert_v2"`) |
 | `evaluation_metric` | success, per-target errors, `n_stable`, `n_extra_stable` | final reporting only (`final_report`) |
 
-They must not be mixed: the metric is flat (success or not) and would give an optimizer nothing to follow; the naive objective is cheap but can be fooled; the expert objective is informed but costs a full check.
+They must not be mixed: the metric is flat (success or not) and would give an optimizer nothing to follow; the naive objective is cheap but can be fooled; the expert objective is informed, graded and also cheap.
 
-**The ghost case** (`tests/test_scoring.py`). Toy with $w=10, k=1$: the low and middle fixed points merge in a fold at $I^*\approx1.8095$. At $I^*+10^{-3}$ the system is monostable and the checker fails it. But the dynamics near the vanished state are extremely slow, so a simulation started low is still there when time $T$ ends. The naive score looks *better* than at a truly successful nearby point; the expert objective is not fooled.
+**The expert objective (`expert_v2`).** For each target, complete it to a full state $r^*$: the observed populations take the target values, and an unobserved population solves its own fixed-point equation given the others (for `ei_2pop`: $r_I = F_I(w_{IE}E^* - w_{II} r_I + I_I)$, which has a unique root on $[0, r_{max}]$, found with `brentq`). Then
 
-**Known weakness of the expert objective.** In monostable regions it is graded but nearly flat (the only signal is the surviving fixed point drifting), with a jump of penalty/K whenever a target becomes unmatched. See [NOTES.md](../NOTES.md).
+$$\text{residual}_k = \max_{\text{observed}} |-r^* + F(Wr^*+I)|,\qquad \text{stab}_k = \max\big(0,\ \max\mathrm{Re}\,\lambda(J(r^*))\cdot\max\tau + \delta\big),$$
+
+$$\text{score} = \tfrac1K\sum_k\big(\text{residual}_k + \lambda_{\text{stab}}\,\text{stab}_k\big),\quad \delta=0.01,\ \lambda_{\text{stab}}=1.$$
+
+It is zero exactly when every target is a fixed point that is stable with margin $\delta$, it is continuous in the parameters (no tolerance, no matching, no fixed-point search), and it supports at most one unobserved population. Success is never decided by the score: only the checker decides. The best score is not always a checker success, which is why the baselines check their top candidates before submitting (`baseline.submission_checks`, NOTES.md). Why it replaced the first expert objective, and the evidence: [decisions/0001-expert-objective.md](decisions/0001-expert-objective.md). Its parameters `scoring.v2_delta` and `scoring.v2_lambda` are in the experiment config; they were not tuned.
+
+**The ghost case** (`tests/test_scoring.py`). Toy with $w=10, k=1$: the low and middle fixed points merge in a fold at $I^*pprox1.8095$. At $I^*+10^{-3}$ the system is monostable and the checker fails it. But the dynamics near the vanished state are extremely slow, so a simulation started low is still there when time $T$ ends. The naive score looks *better* than at a truly successful nearby point.
 
 ## 9. Budget and isolation
 
 - **One evaluation each:** `evaluate` (either objective), `check`, `simulate`. A naive evaluation runs K trajectories but costs one.
-- **Raises:** `BudgetExhausted`, checked *before* any work. With budget L, calls 1..L succeed and L+1 raises (default L = 200).
+- **Raises:** `BudgetExhausted`, checked *before* any work. With budget L, calls 1..L succeed and L+1 raises (default L: 200 for the toy, 1000 for `ei_2pop`; both configurable).
 - **Time cap:** `simulate` accepts `T` up to `T_max` (`SimConfig.T_max`, default 200 · max(τ) = 2000 here). A larger `T` raises `ValueError` and costs nothing. The naive objective uses the fixed `simulator.T` from the config, which must stay below the cap.
 - **Free:** malformed calls (unknown objective, missing or out-of-bounds parameters, wrong `x0` shape, `T` above `T_max`) raise `ValueError` without charging; `final_report`; read-only information.
 - **Private:** model, budget counter, hidden planted parameters. `targets` returns a copy; `space.fixed` is read-only.
@@ -160,7 +165,7 @@ They must not be mixed: the metric is flat (success or not) and would give an op
 | `test_checker_nd`: cross-check on `ei_2pop` (80 parameter sets × 80 random initial conditions) | type A (simulation settles where the checker found nothing) fails the test; type B (found state never reached) warns |
 | `test_checker_nd`: limit cycle ($\tau_I=20$) | no stable state, `success` false, simulator never settles |
 | `test_tasks` | planted parameters solve their tasks, guards hold, committed files match current configs |
-| `test_scoring` | expert bounds (≤ tol or ≥ penalty/K), no ties across a sweep, the ghost case |
+| `test_scoring` | `expert_v2`: zero at the planted solution (toy and `ei_2pop`), positive at the hand-checked unstable point, no jump where the checker's verdict flips, better fits score better; the naive ghost case |
 | `test_budget_env` | counting, limit, free calls, no bypass, `final_report` unreachable from budgeted methods |
 | `test_determinism`, `test_config` | identical results on rebuild; strict config validation; hashes |
 
@@ -170,7 +175,7 @@ They must not be mixed: the metric is flat (success or not) and would give an op
 - 1D grid limit above (theoretical for the shipped bounds).
 - Planting is costly because saturated or monostable draws are common; the toy has a heavy tail.
 - With $\tau_I=5$ oscillations are rare (~0.1% of random sets vs ~2% at $\tau_I=20$), so oscillatory difficulty is a knob for later.
-- The expert objective gives weak signal in monostable regions.
+- The expert objective supports at most one unobserved population, and its best score is not always a checker success (see section 8).
 - Compute is not budgeted: a `simulate` call costs one evaluation whatever its $T$, but $T$ is capped at `T_max` (section 9).
 - Open decisions: [NOTES.md](../NOTES.md).
 
@@ -195,7 +200,7 @@ for fp in res.fixed_points:
 print("success:", res.success, "| n_stable:", res.n_stable)
 print("target errors:", res.target_errors)
 print("exhaustive search:", res.global_search_exhaustive)
-print("expert objective:", round(env.evaluate(params, "expert_v1"), 3))
+print("expert objective:", round(env.evaluate(params, "expert_v2"), 3))
 print("evaluations used:", env.n_evaluations, "| remaining:", env.budget_remaining)
 ```
 
@@ -208,8 +213,8 @@ fixed point [0.5, 0.5] stable
 success: False | n_stable: 1
 target errors: [0.4036618348008411, None]
 exhaustive search: False
-expert objective: 1.426
-evaluations used: 2 | remaining: 198
+expert objective: 0.134
+evaluations used: 2 | remaining: 998
 ```
 
 The centre of the box is monostable: one stable state at (0.5, 0.5). One target gets it (error 0.40), the other gets nothing.

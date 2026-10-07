@@ -20,7 +20,7 @@ The Phase 0 toy validation checklist from the project plan, each item with its e
 |---|---|---|---|
 | 1 | The checker labels known bistable and known monostable parameter sets correctly (unit tests) | ticked | `tests/test_checker.py::test_bistable_hand_checked`, `::test_monostable_cannot_realize_two_targets`, `::test_checker_and_simulator_agree_on_toy`; `tests/test_model.py::test_toy_bistable_hand_checked`, `::test_toy_small_w_is_monostable` |
 | 2 | The score is consistent: better fits score better | ticked, with a caveat | `tests/test_scoring.py::test_expert_separates_success_from_failure_and_counts_unmatched` (all matched <= tol, each unmatched >= penalty/K), `::test_expert_is_zero_at_the_planted_solution`, `::test_expert_is_never_constant_across_a_monostable_bistable_sweep`. Caveat: this holds for the expert objective's ordering, but the expert objective is flat on plateaus (section 3) and condition C does worse than B (section 2); the naive objective can be fooled (`::test_naive_objective_can_be_fooled_by_a_slow_transient_past_a_fold`). "Consistent" is tested, "useful for search" is not established. |
-| 3 | Random search, Bayesian optimization and CMA-ES each solve the toy within the budget in most seeds | **not met as written** | numbers below |
+| 3 | Random search, Bayesian optimization and CMA-ES each solve the toy within the budget in most seeds | **not met as written**; **amended criterion met** (amendment accepted by Val after seeing the results) | numbers below |
 | 4 | A scripted "dummy agent" (fixed sequence of tool calls) runs the full loop and produces logs | ticked | `tests/test_tools.py::test_dummy_agent_completes_an_episode_with_a_complete_log` (toy and ei_2pop), `::test_dummy_agent_rerun_gives_identical_logs`; 25 toy runs and 1 ei_2pop run with complete logs (sections 2 and 4) |
 | 5 | Results are identical when rerun with the same seed | ticked | `tests/test_runner.py::test_rerun_is_identical_except_volatile_fields`, `tests/test_tools.py::test_dummy_agent_rerun_gives_identical_logs`, `tests/test_optimizers.py::test_same_seed_gives_identical_history`, `tests/test_determinism.py`; the 75 A/B-cma/C-cma runs of the budget-200 sweep reproduce the main grid exactly (success, first success, final error) |
 
@@ -44,9 +44,10 @@ the task for at least one of 5 seeds, but I did not measure rates there, so I ca
 much easier it was. Random search is expected to fail on a three-parameter problem with a
 2% tolerance.
 
-*Proposed amended wording (a criterion change made after seeing the results, pending Val's
-decision; not adopted):* "At least one optimizer solves the toy in most seeds, and random
-search does not." On the numbers: B-cma solves 18/25 (met), A solves 0/25 (met).
+*Amended criterion.* **This is a criterion change made after seeing the results; it was
+accepted by Val.** New wording: "At least one optimizer solves the toy in most seeds." On the
+numbers: B-cma solves 18/25 = 72% at budget 200 (met), and random search solves 0/25 as
+expected. The original wording stays visible above as "not met as written".
 
 ## 2. Toy results (budget 200, 5 tasks x 5 seeds)
 
@@ -142,6 +143,21 @@ C-tpe: median 1.027, min 0.513, max 1.141; targets matched at the best point (ch
   evaluated points are similarly often monostable. I have not examined the naive objective's
   landscape here.
 
+### Classification of failed C runs (final best params)
+
+Priority order a > b > c > d; each failed run counted once, non-exclusive counts in brackets
+(source: `results/phase0/diagnosis.md`).
+
+| condition | failed runs | (a) monostable plateau | (b) near miss, stable state within 3 tol of an unmatched target | (c) nearest fixed point to an unmatched target is unstable | (d) other |
+|---|---|---|---|---|---|
+| C-cma | 14 | 5 (5) | 4 (4) | 5 (6) | 0 (0) |
+| C-tpe | 23 | 4 (4) | 7 (7) | 10 (15) | 2 (2) |
+
+Observations: the monostable plateau is a minority (5/14 and 4/23), as before. Category (c),
+where the fixed point closest to an unmatched target is unstable, is the largest single group
+for C-tpe (10 exclusive, 15 in all) and ties the plateau for C-cma (5 exclusive, 6 in all).
+Near misses are 4 and 7. Almost nothing is left unexplained by these tests (0 and 2 in "other").
+
 ## 4. Per-task difficulty
 
 
@@ -163,7 +179,7 @@ from the upper edge; seed4: 0.002 from the lower edge) and are solved by several
 so closeness to the edge does not by itself make a task hard. With 5 tasks these are
 descriptions, not tested relationships.
 
-## 5. Toy budget sweep (5 tasks x 5 seeds per cell)
+## 5. Toy budget sweep (5 tasks x 5 seeds per cell; expert_v2 in section 6)
 
 Success of the submitted parameters, with Wilson 95% intervals.
 
@@ -184,7 +200,66 @@ unsolved C-cma runs are concentrated on two tasks (seed3: 0 of 5, seed0: 1 of 5,
 counts from `toy_sweep_1000.csv`). The default toy budget (200) is unchanged; the choice is
 yours.
 
-## 6. ei_2pop smoke (budget 1000, task seed0, seed 0, one run per condition)
+## 6. expert_v2 (candidate replacement of the expert objective)
+
+The definition and the evaluation plan were written into NOTES.md and committed (`784d4a0`)
+before any v2 run. The toy is the development set; expert_v2 was **not** run on ei_2pop at
+scale (ei_2pop is the test set), and delta (0.01) and lambda (1.0) were not tuned. The
+objective was designed after seeing the Phase 0 results on these same toy tasks, so the toy
+numbers below are development results, not a clean test.
+
+Toy grid, budget 200, 5 tasks x 5 seeds (`results/phase0/toy_grid_v2.md`), next to the v1 and
+B results of section 2:
+
+| condition | success rate | Wilson 95% | by 25% | by 50% | by 100% | median evals to first success (n) | mean final error |
+|---|---|---|---|---|---|---|---|
+| B-cma (naive) | 18/25 = 0.72 | [0.52, 0.86] | 0.00 | 0.08 | 0.72 | 147 (18) | 0.013 |
+| B-tpe (naive) | 12/25 = 0.48 | [0.30, 0.67] | 0.04 | 0.16 | 0.48 | 115.5 (12) | 0.033 |
+| C-cma (expert_v1) | 11/25 = 0.44 | [0.27, 0.63] | 0.00 | 0.12 | 0.44 | 120 (11) | 0.153 |
+| C-tpe (expert_v1) | 2/25 = 0.08 | [0.02, 0.25] | 0.00 | 0.04 | 0.08 | 114.5 (2) | 0.192 |
+| **C2-cma (expert_v2)** | 24/25 = 0.96 | [0.80, 0.99] | 0.00 | 0.04 | 0.96 | 126.5 (24) | 0.024 |
+| **C2-tpe (expert_v2)** | 17/25 = 0.68 | [0.48, 0.83] | 0.00 | 0.20 | 0.72 | 126.5 (18) | 0.072 |
+
+Successes per task (of 5 seeds):
+
+| task | B-cma | C-cma (v1) | C2-cma (v2) | B-tpe | C-tpe (v1) | C2-tpe (v2) |
+|---|---|---|---|---|---|---|
+| seed0 | 3 | 0 | 4 | 0 | 0 | 1 |
+| seed1 | 5 | 4 | 5 | 4 | 0 | 3 |
+| seed2 | 5 | 5 | 5 | 4 | 0 | 5 |
+| seed3 | 1 | 0 | 5 | 1 | 0 | 3 |
+| seed4 | 4 | 2 | 5 | 3 | 2 | 5 |
+
+Budget sweep for CMA-ES (`results/phase0/toy_sweep_v2_*.md`; A, B-cma and C-cma are from
+section 5):
+
+| budget | A | B-cma | C-cma (v1) | C2-cma (v2) |
+|---|---|---|---|---|
+| 100 | 0/25 | 2/25 | 3/25 | 1/25 [0.01, 0.20] |
+| 200 | 0/25 | 18/25 | 11/25 | 24/25 [0.80, 0.99] |
+| 500 | 1/25 | 25/25 | 14/25 | 25/25 [0.87, 1.00] |
+| 1000 | 3/25 | 25/25 | 15/25 | 25/25 [0.87, 1.00] |
+
+**Observations**
+- With CMA-ES, expert_v2 solves 24/25 at budget 200 against 11/25 for v1 and 18/25 for the
+  naive objective; the v2 interval [0.80, 0.99] lies above the v1 interval [0.27, 0.63] and
+  overlaps B's [0.52, 0.86]. At 500 and 1000 it solves all 25. At budget 100
+  it is the worst of the three CMA-ES conditions with a success (1/25), so it needs more than
+  100 evaluations here.
+- The one CMA-ES failure at 200 is task seed0, seed 4 (final error 0.504). In the per-task
+  table seed0 and seed3, the tasks v1 never solved, are solved 4/5 and 5/5.
+- With TPE, v2 solves 17/25 against 2/25 for v1 and 12/25 for B-tpe. Its first-success rate
+  by 100% of the budget (0.72) is above its success rate (0.68): in one run (task seed1,
+  seed 4) a successful point was evaluated at evaluation 78 but the submitted point, the best
+  by v2 score, was not a success (final error 0.013, i.e. a target just out of tolerance). The
+  best v2 score does not always identify a checker success.
+- Time to first success is similar across objectives (medians 115 to 147 evaluations).
+
+Not shown here: any ei_2pop evidence for v2, any effect of delta or lambda, and whether v2's
+advantage depends on the toy having no unobserved population (the unobserved-population
+branch is only unit-tested via the ei_2pop zero-score check).
+
+## 7. ei_2pop smoke (budget 1000, task seed0, seed 0, one run per condition)
 
 | condition | success | evals used | first success (eval) | final error |
 |---|---|---|---|---|
@@ -200,7 +275,7 @@ The wall clock of the naive conditions is about 90 to 120 s per run versus about
 expert ones (`ei_smoke.csv`). The target was that A rarely succeeds on ei_2pop; one run
 cannot confirm that.
 
-## 7. Reproduce
+## 8. Reproduce
 
 ```
 python -m bench.batch configs/exp_toy_1pop.yaml --tasks "tasks/toy_1pop_*.json" \
@@ -210,5 +285,6 @@ python -m bench.batch configs/exp_ei_2pop.yaml --tasks tasks/ei_2pop_K2_seed0.js
 python -m bench.batch configs/exp_toy_1pop.yaml --tasks "tasks/toy_1pop_*.json" \
   --conditions A B:cma C:cma --seeds 0-4 --budget 100 --csv results/phase0/toy_sweep_100.csv
 ```
-(and 200, 500, 1000). Sections 3 and 4: `python scripts/phase0_diagnosis.py` (needs `runs/phase0/grid`).
+(and 200, 500, 1000). Section 6: the same commands with `--conditions C2:cma C2:tpe` (grid) and
+`--conditions C2:cma --budget N` (sweep). Sections 3 and 4: `python scripts/phase0_diagnosis.py` (needs `runs/phase0/grid`).
 Bit-identical results need the locked environment (`uv.lock`).

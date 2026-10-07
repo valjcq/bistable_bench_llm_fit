@@ -123,6 +123,7 @@ Fixed-step RK4, `dt = 0.1`. Fixed steps keep results bit-reproducible: no step-s
 |---|---|---|
 | `naive_objective` | simulate from a low and a high start (fractions [0.0, 1.0] of $r_{max}$, all populations), mean error of end states to targets, paired in sorted order. One evaluation. | optimizers (`evaluate(..., "naive")`) |
 | `expert_v1_objective` | from the checker: matched target adds its real error; unmatched adds distance to the nearest fixed point of any kind + penalty 1.0; mean over targets. All matched ⇒ ≤ tol; each unmatched ⇒ ≥ 1.0/K. | optimizers (`"expert_v1"`) |
+| `expert_v2_objective` | candidate replacement of v1, no checker call: each target is completed to a full state; score = mean of (fixed-point residual + lambda * instability). Zero when every target is a stable fixed point. Definition in [NOTES.md](../NOTES.md); results in [phase0.md](phase0.md). | optimizers (`"expert_v2"`) |
 | `evaluation_metric` | success, per-target errors, `n_stable`, `n_extra_stable` | final reporting only (`final_report`) |
 
 They must not be mixed: the metric is flat (success or not) and would give an optimizer nothing to follow; the naive objective is cheap but can be fooled; the expert objective is informed but costs a full check.

@@ -166,3 +166,10 @@ NOT run with v2 at scale (it is the test set); no parameter (delta, lam) is tune
 Implementation notes (not changes to the definition): at most one unobserved population is
 supported (the only case in the shipped models); the unobserved root is bracketed on
 [0, r_max] by the sign of g at the ends.
+
+## expert_v2 results (toy, development set)
+Per the pre-registered plan: C2-cma 24/25 at budget 200 (C-cma v1 11/25, B-cma 18/25), C2-tpe
+17/25 (v1 2/25); C2-cma sweep 1/25, 24/25, 25/25, 25/25 at 100/200/500/1000. Details and caveats
+(toy is the dev set, no ei_2pop run, best-v2-score is not always a checker success) in
+`docs/phase0.md` section 6. Objective names: naive, expert_v1 (was "expert"), expert_v2;
+condition C2 = C with expert_v2. Event logs from before the rename say "expert" = v1.

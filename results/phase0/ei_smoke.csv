@@ -1,0 +1,7 @@
+label,condition,optimizer,task_id,seed,success,evals_used,first_success_eval,budget,final_error,wall_clock_s,run_name
+A,A,random,ei_2pop_K2_seed0,0,False,1000,,1000,0.017183302275973804,20.008,ei_2pop_K2_seed0__A__s0
+B-cma,B,cma,ei_2pop_K2_seed0,0,True,1000,62,1000,1.746515292463252e-05,120.607,ei_2pop_K2_seed0__B-cma__s0
+B-tpe,B,tpe,ei_2pop_K2_seed0,0,True,1000,953,1000,0.013661614723233947,89.136,ei_2pop_K2_seed0__B-tpe__s0
+C-cma,C,cma,ei_2pop_K2_seed0,0,False,1000,,1000,0.5093126177887884,21.438,ei_2pop_K2_seed0__C-cma__s0
+C-tpe,C,tpe,ei_2pop_K2_seed0,0,False,1000,,1000,0.09381433450674326,22.706,ei_2pop_K2_seed0__C-tpe__s0
+S,S,cma+tpe,ei_2pop_K2_seed0,0,False,995,,1000,0.09484197780738225,23.486,ei_2pop_K2_seed0__S__s0

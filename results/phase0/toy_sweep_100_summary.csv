@@ -1,0 +1,4 @@
+label,runs,successes,success_rate,wilson_low,wilson_high,succeeded_by_25pct,succeeded_by_50pct,succeeded_by_100pct,runs_with_a_success,median_evals_to_first_success,mean_final_error
+A,25,0,0.0,0.0,0.13319649395317873,0.0,0.0,0.0,0,,0.41179372072392384
+B-cma,25,2,0.08,0.02221993369109193,0.24966512122957818,0.0,0.0,0.08,2,66.5,0.08616444837590455
+C-cma,25,3,0.12,0.04166741357068093,0.2995619218337349,0.0,0.0,0.12,3,96,0.21970608971560782

@@ -68,3 +68,30 @@ one.
   intervals are optimistic for generalisation across tasks; the budget (500) is an exception to
   the pre-registered budget rule; random search is at 0.18 here against 0.13 on the selection
   set.
+
+## Additional analysis (added after the results were known; same data, nothing else changed)
+
+This section was requested after the main report and is labelled as such. It uses the same 225
+runs. Script: `scripts/ei2pop_bootstrap.py`, output `results/ei_test/bootstrap.md`.
+
+- *Tasks solved* = tasks where the condition succeeds in at least 3 of the 5 seeds.
+- *Bootstrap over tasks*: resample the 9 tasks with replacement, keep each task's 5 seeds
+  together, recompute the pooled success rate; 20000 resamples (same resamples for every
+  condition, rng seed 0); percentile 95% interval. It treats tasks, not runs, as the unit of
+  sampling, so it is wider than the Wilson interval where tasks differ a lot.
+
+| condition | success rate (pooled) | tasks solved (>= 3/5 seeds) | bootstrap-over-tasks 95% interval | Wilson 95% (main table) |
+|---|---|---|---|---|
+| A | 0.178 | 1/9 | [0.04, 0.36] | [0.09, 0.31] |
+| B-cma | 0.800 | 8/9 | [0.62, 0.96] | [0.66, 0.89] |
+| B-tpe | 0.689 | 7/9 | [0.47, 0.89] | [0.54, 0.80] |
+| C-cma | 0.978 | 9/9 | [0.93, 1.00] | [0.88, 1.00] |
+| C-tpe | 0.778 | 7/9 | [0.58, 0.93] | [0.64, 0.87] |
+
+Reading: the bootstrap intervals are wider than the Wilson ones for A, B and C-tpe, as expected
+when success varies between tasks. Pairs with non-overlapping bootstrap intervals (unrounded
+values): A against each of the other four, and C-cma against B-tpe. C-cma against B-cma, C-cma
+against C-tpe and C-tpe against B-tpe overlap. Compared with the Wilson comparison of the main
+report, one difference is lost: C-cma against C-tpe ([0.93, 1.00] against [0.58, 0.93] touch). The
+count of tasks solved gives the same ordering as the pooled rates: C-cma 9, B-cma 8, B-tpe and
+C-tpe 7, A 1.

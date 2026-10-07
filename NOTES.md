@@ -217,3 +217,21 @@ Successes: A 2/15, 2/15, 4/15 at budgets 500/1000/2000; B-cma 11/15, 10/15, 10/1
 all three. Criterion 2 (best baseline not at 100%) holds at every budget; criterion 1 (A at most
 1 of 15) fails at every budget, so NO BUDGET QUALIFIES. Per the protocol: stop and report to Val.
 No test run was made. Data: `results/ei_selection/`.
+
+## ei_2pop test protocol: AMENDMENT (written and committed BEFORE the test run)
+Decided by Val after the budget selection found no budget under the original rule (A succeeded in
+2/15, 2/15, 4/15 runs at 500/1000/2000, against a threshold of at most 1/15) and after expert_v1
+was removed (`docs/decisions/0001-expert-objective.md`). This amendment replaces the "Test
+conditions" and the budget of the protocol above; everything else (sets, metrics, "a difference
+only when the Wilson intervals do not overlap", no change after seeing test results) stands.
+- Budget: **500** total evaluations per run (Val's choice, an explicit exception to the budget rule;
+  the rule's second criterion held at 500, the first failed by one run: A 2/15 against 1/15).
+- Test set: `tasks/ei_2pop_K2_seed{1..9}.json` (9 tasks; `ei_2pop_K2_seed0` stays excluded).
+- Conditions (C = optimizer + `expert_v2`, the only expert objective): **A, B-cma, B-tpe, C-cma,
+  C-tpe**; 5 seeds (0-4) per task: 45 runs per condition, 225 in all.
+- Config `configs/exp_ei_2pop.yaml` with `--budget 500`; all settings as in the protocol; the
+  submission rule (reserve 3, check the top 3 distinct candidates) for every condition; A is random
+  search ranked by `expert_v2`.
+- Report: `docs/ei2pop_test.md` (condition table with Wilson intervals, success by 25/50/100% of the
+  budget, wall-clock per run, per-task table). No change to code, settings or the report's
+  definitions after seeing the results.

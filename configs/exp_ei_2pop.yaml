@@ -22,7 +22,6 @@ simulator:
 
 scoring:
   naive_ic_fractions: [0.0, 1.0]  # one per target: low IC <-> lowest target, high IC <-> highest
-  expert_penalty: 1.0
 
 budget:
   max_evaluations: 1000

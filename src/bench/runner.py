@@ -5,9 +5,9 @@
 Conditions (budget-matched; all spend the whole evaluation budget on ONE optimizer run):
     A  random search, expert objective
     B  optimizer (config baseline.optimizer, or --optimizer), naive objective
-    C  same optimizer, expert objective (expert_v1)
-    C2 same optimizer, expert_v2 objective (candidate replacement of v1)
-The best parameters by the condition's own objective are submitted (final_report).
+    C  same optimizer, expert objective (expert_v2)
+The submission follows the shared rule (see choose_submission): a few evaluations are reserved
+and the best top-ranked candidates are checked; the choice is submitted (final_report).
 
 runs/<run_name>/ gets events.jsonl (every call), config.json (everything needed to rebuild the
 environment: resolved experiment config, task id, targets, condition, seed) and result.json.
@@ -29,18 +29,16 @@ from bench.logging import JsonlLogger
 from bench.optimizer_runs import RunRegistry
 from bench.tasks import Task, load_task
 
-CONDITIONS = ("A", "B", "C", "C2")
+CONDITIONS = ("A", "B", "C")
 
 
 def condition_setup(condition: str, optimizer: str) -> tuple[str, str]:
     """(optimizer name, objective name) used by a condition."""
     if condition == "A":
-        return "random", "expert_v1"
+        return "random", "expert_v2"
     if condition == "B":
         return optimizer, "naive"
     if condition == "C":
-        return optimizer, "expert_v1"
-    if condition == "C2":  # C with the candidate objective expert_v2
         return optimizer, "expert_v2"
     raise ValueError(f"condition must be one of {CONDITIONS}, got {condition!r}")
 
@@ -178,7 +176,7 @@ def run_scripted(
                 "experiment": cfg.resolved(),
                 "condition": "S",
                 "optimizer": "cma+tpe",
-                "objective": "expert_v1",
+                "objective": "expert_v2",
                 "seed": seed,
                 "task": {"id": task_id, "seed": task.seed, "K": task.K,
                          "targets": task.targets.tolist()},
@@ -194,7 +192,7 @@ def run_scripted(
         "run_name": run_dir.name,
         "condition": "S",
         "optimizer": "cma+tpe",
-        "objective": "expert_v1",
+        "objective": "expert_v2",
         "seed": seed,
         "task_id": task_id,
         "evals_used": episode.env.n_evaluations,

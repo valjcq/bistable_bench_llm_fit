@@ -94,11 +94,7 @@ class ScoringConfig:
     # EVERY population at naive_ic_fractions[i] * r_max. One entry per target (K entries);
     # targets are sorted by increasing rate, so a low IC goes with the low target.
     naive_ic_fractions: tuple[float, ...] = (0.0, 1.0)
-    # Expert objective: constant added to every unmatched target. Rates are normalized to
-    # r_max ~ 1 so errors are O(1); the penalty must exceed tol * K for the expert objective
-    # to rank "all matched" below "something unmatched".
-    expert_penalty: float = 1.0
-    # expert_v2 (definition in NOTES.md): stability margin demanded of every target state, in
+    # Expert objective (definition in NOTES.md): stability margin demanded of every target state, in
     # units of the slowest tau, and the weight of the instability term against the residual.
     v2_delta: float = 0.01
     v2_lambda: float = 1.0
@@ -106,8 +102,6 @@ class ScoringConfig:
     def __post_init__(self) -> None:
         if not self.naive_ic_fractions or any(not 0 <= f <= 1 for f in self.naive_ic_fractions):
             raise ValueError("scoring.naive_ic_fractions must be non-empty, values in [0, 1]")
-        if self.expert_penalty <= 0:
-            raise ValueError("scoring.expert_penalty must be > 0")
         if self.v2_delta < 0 or self.v2_lambda <= 0:
             raise ValueError("scoring.v2_delta must be >= 0 and scoring.v2_lambda > 0")
 
@@ -165,14 +159,6 @@ class ExperimentConfig:
             self.task.forbid_extra_stable_states,
         ):
             raise ValueError("checker.tol / forbid_extra_stable_states must come from `task`")
-        if self.scoring.expert_penalty / self.task.K <= self.task.tol:
-            # An unmatched target adds >= penalty, so the expert score of a failing parameter set
-            # is >= penalty / K. That must exceed tol, or "score <= tol" would not mean "all
-            # targets matched" (the first-success shortcut and the docs rely on it).
-            raise ValueError(
-                f"scoring.expert_penalty / task.K = {self.scoring.expert_penalty / self.task.K} "
-                f"must exceed task.tol = {self.task.tol}"
-            )
         if len(self.scoring.naive_ic_fractions) != self.task.K:
             raise ValueError(
                 f"scoring.naive_ic_fractions needs one entry per target (K={self.task.K}), "

@@ -3,10 +3,9 @@
     naive_objective   what a user without bifurcation knowledge would write: simulate from a
                       low and a high start and compare where the simulations end up. Cheap,
                       but it can be fooled (see tests/test_scoring.py).
-    expert_v2_objective  candidate replacement of v1 (no checker call): asks of each target
-                      whether it is a stable fixed point. See NOTES.md for the definition.
-    expert_v1_objective  built on the fixed-point checker: knows about stability and stays
-                      graded when the system is monostable. Meant to be minimized.
+    expert_v2_objective  the expert objective (no checker call): asks of each target whether it
+                      is a stable fixed point. Definition: NOTES.md and
+                      docs/decisions/0001-expert-objective.md. Meant to be minimized.
     evaluation_metric success flag + per-target errors from the checker. Used ONLY for final
                       reporting; it is flat (success or not) so it must never be optimized.
 
@@ -57,42 +56,6 @@ def naive_objective(
     sims = simulate_batch(model, params, x0s, T, sim_cfg)
     final_observed = np.array([s.final_state for s in sims])[:, model.observed_idx]
     return float(np.abs(final_observed - targets).max(axis=1).mean())
-
-
-def expert_v1_objective(
-    result: CheckResult,
-    targets: np.ndarray,
-    penalty: float,
-    no_fixed_point_distance: float,
-) -> float:
-    """Checker-based objective, lower is better, graded even when the system is monostable.
-
-    For each target:
-      * matched (a distinct stable state within tol): contributes its real error;
-      * unmatched: contributes the distance to the nearest fixed point of ANY kind (stable,
-        unstable, saddle: it varies smoothly with the parameters, so there is always a
-        gradient to follow) plus the constant `penalty`.
-    The result is the mean over targets. The constant penalty is what separates "every target
-    matched" (value <= tol) from "something is missing" (value >= penalty / K).
-
-    If the search found no fixed point at all (possible only for N>=2, where it is not
-    exhaustive), the distance falls back to `no_fixed_point_distance`.
-    The distance metric is the max abs difference over observed populations, like the errors.
-    """
-    all_observed = np.array([fp.observed for fp in result.fixed_points]).reshape(
-        len(result.fixed_points), targets.shape[1]
-    )
-    contributions = []
-    for i, target in enumerate(targets):
-        if result.target_matched[i]:
-            contributions.append(float(result.target_errors[i]))  # real error, not a cost
-        else:
-            if len(all_observed):
-                d = float(np.abs(all_observed - target).max(axis=1).min())
-            else:
-                d = no_fixed_point_distance
-            contributions.append(d + penalty)
-    return float(np.mean(contributions))
 
 
 @dataclass(frozen=True)

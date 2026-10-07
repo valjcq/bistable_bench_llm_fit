@@ -168,35 +168,13 @@ def test_first_success_expert_and_naive(cfg_toy, tmp_path):
         return tmp_path / f"{objective}.jsonl"
 
     good, bad = task.planted_params, {"w": 1.0, "I": 0.0, "k": 1.0}  # monostable: fails
-    p = events("expert_v1", [(bad, 0.7), (bad, 0.01), (good, 0.005)])
-    assert first_success_eval(cfg_toy, task, p) == 3  # expert too: the checker confirms
+    # expert_v2 scores are not on the tol scale: every point is a candidate, the checker decides
+    p = events("expert_v2", [(bad, 0.7), (bad, 0.01), (good, 0.9)])
+    assert first_success_eval(cfg_toy, task, p) == 3  # the successful point has a HIGH score
     p = events("naive", [(bad, 0.7), (bad, 0.01), (good, 0.015)])
     assert first_success_eval(cfg_toy, task, p) == 3  # naive: point 2 is checked and fails
     p = events("naive", [(bad, 0.7), (bad, 0.01)])
     assert first_success_eval(cfg_toy, task, p) is None
-
-
-def test_a_low_average_score_is_not_taken_as_success(cfg_toy, task_toy, tmp_path):
-    """Regression: errors 0.00 and 0.03 average 0.015 <= tol but one target is out of tolerance.
-
-    The real expert objective charges an unmatched target >= penalty, so it never produces such
-    a score; the first-success computation must not rely on that and confirms with the checker.
-    """
-    env0 = Environment.from_task(cfg_toy, task_toy)
-    stable = [
-        fp.observed[0] for fp in env0.check(task_toy.planted_params).fixed_points if fp.stable
-    ]
-    low, high = min(stable), max(stable)
-    targets = np.array([[low], [high + 0.03]])  # second target is 0.03 > tol = 0.02 away
-    task = replace(task_toy, targets=targets)
-    path = tmp_path / "e.jsonl"
-    env = Environment(cfg_toy, targets, 0)
-    with JsonlLogger(path, 0, "h") as lg:
-        args = {"params": task_toy.planted_params, "objective": "expert_v1"}
-        assert env.evaluate(task_toy.planted_params, "expert_v1") >= 0.5  # the real score is high
-        lg.log("b", "evaluate", args, {"value": 0.015}, 0)  # the hypothetical averaged score
-    assert not env.final_report(task_toy.planted_params).success
-    assert first_success_eval(cfg_toy, task, path) is None
 
 
 def test_override_optimizer_is_recorded_in_config_and_hash(cfg_toy, small_cfg, toy_task, tmp_path):
@@ -242,10 +220,10 @@ def test_parallel_batch_matches_serial(small_cfg, tmp_path):
     assert drop(serial) == drop(parallel)
 
 
-def test_condition_c2_uses_expert_v2_and_confirms_every_point(small_cfg, toy_task, tmp_path):
-    res = _run(small_cfg, toy_task, "C2", 0, tmp_path, "cma")
+def test_condition_c_uses_expert_v2_and_confirms_every_point(small_cfg, toy_task, tmp_path):
+    res = _run(small_cfg, toy_task, "C", 0, tmp_path, "cma")
     d = tmp_path / res["run_name"]
-    assert res["objective"] == "expert_v2" and "C2-cma" in res["run_name"]
+    assert res["objective"] == "expert_v2" and "C-cma" in res["run_name"]
     ev = [e for e in read_events(d / "events.jsonl") if e["name"] == "evaluate"]
     assert {e["arguments"]["objective"] for e in ev} == {"expert_v2"} and len(ev) == 37
     # expert_v2 scores are not on the tol scale: first success must not assume score <= tol

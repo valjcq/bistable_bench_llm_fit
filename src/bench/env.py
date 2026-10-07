@@ -27,7 +27,7 @@ from bench.tasks import Task
 
 EventHook = Callable[[dict[str, Any]], None]
 
-OBJECTIVES = ("naive", "expert_v1", "expert_v2")
+OBJECTIVES = ("naive", "expert_v2")
 
 # The interface an optimizer may be given: exactly these budgeted methods (plus the read-only
 # information properties). `final_report` is deliberately NOT here: it is unbudgeted and flat,
@@ -139,8 +139,9 @@ class Environment:
     def evaluate(self, params: Mapping[str, float], objective_name: str) -> float:
         """Objective value of `params` (lower is better). One evaluation.
 
-        objective_name is "naive" (simulate from low/high starts and compare) or "expert_v1"
-        (checker-based, graded). The final success metric is deliberately NOT available here.
+        objective_name is "naive" (simulate from low/high starts and compare) or "expert_v2"
+        (is each target a stable fixed point? graded, no checker call). The final success metric
+        is deliberately NOT available here.
         """
         if objective_name not in OBJECTIVES:
             raise ValueError(f"objective_name must be one of {OBJECTIVES}, got {objective_name!r}")
@@ -155,15 +156,9 @@ class Environment:
                 cfg.simulator.sim_config(),
                 cfg.simulator.T,
             )
-        elif objective_name == "expert_v2":
+        else:
             value = scoring.expert_v2_objective(
                 self._model, params, self._targets, cfg.scoring.v2_delta, cfg.scoring.v2_lambda
-            )
-        else:
-            result = check(self._model, params, self._targets, cfg.checker)
-            r_max = self._model.net(params).r_max[self._model.observed_idx]
-            value = scoring.expert_v1_objective(
-                result, self._targets, cfg.scoring.expert_penalty, float(r_max.max())
             )
         self._emit("evaluate", index, params, objective=objective_name, value=value)
         return value

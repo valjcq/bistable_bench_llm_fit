@@ -31,7 +31,7 @@ def run_scripted_agent(episode: Episode) -> dict[str, Any]:
             "name": "cma",
             "hyperparameters": {},
             "sim_budget": task["budget"]["total"] // 2,
-            "objective": "expert_v1",
+            "objective": "expert_v2",
         },
     )
     best = first["best_params"]
@@ -40,7 +40,7 @@ def run_scripted_agent(episode: Episode) -> dict[str, Any]:
         if rest >= 1:
             second = call(
                 "run_optimizer",
-                {"name": "tpe", "sim_budget": rest, "objective": "expert_v1", "init": best},
+                {"name": "tpe", "sim_budget": rest, "objective": "expert_v2", "init": best},
             )
             best = second["best_params"]
     return call("submit", {"params": best})

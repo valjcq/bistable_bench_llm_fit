@@ -56,3 +56,16 @@ All four checkpoints are implemented. Things to keep in mind when building optim
   in v6); we pin optuna 5.0.0 and silence the warning.
 - Simulation time cap: `Environment.simulate` refuses T > T_max (default 200 * max tau), for free.
   The low-level `simulate_batch` is uncapped (tests use long horizons).
+
+## Experimental conditions
+Budget-matched: every condition gets the same evaluation budget.
+
+| | Who searches | Objective |
+|---|---|---|
+| A | random search | expert |
+| B | optimizer (CMA-ES or TPE) | naive |
+| C | same optimizer | expert (the human baseline) |
+| D | LLM agent, open model | chosen by the agent |
+| E | same agent, closed API model | chosen by the agent |
+
+At the end of a baseline episode (A-C) the best parameters by the condition's objective are submitted.

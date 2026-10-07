@@ -182,3 +182,32 @@ logged as `select_submission`); the best-scored one that passes is submitted, el
 one. Phase 0 numbers under the old rule are kept next to the new ones in `docs/phase0.md`.
 Conventions to remember: expert_v2 supports at most one unobserved population; logs written before
 the rename say "expert", which means expert_v1.
+
+## ei_2pop test protocol (written and committed BEFORE any ei_2pop selection or test run)
+Config: `configs/exp_ei_2pop.yaml` unchanged except the budget set per run below; all
+hyperparameters at their Baseline settings; `scoring.v2_delta = 0.01`, `v2_lambda = 1.0`; the
+submission rule (`baseline.submission_checks = 3`) for every condition. Nothing about objectives,
+optimizers or settings is changed between the budget selection and the test run; a bug found
+in between is reported, not silently fixed.
+
+**Sets.**
+- Budget selection set: 5 NEW ei_2pop tasks, seeds 100-104, generated with
+  `python -m bench.tasks configs/exp_ei_2pop.yaml --seeds 100 101 102 103 104 --out tasks/selection`
+  and used for nothing else.
+- Test set: the committed ei_2pop tasks `tasks/ei_2pop_K2_seed{1..9}.json` (9 tasks). Excluded:
+  `ei_2pop_K2_seed0`, which was used in the Phase 0 smoke run.
+
+**Budget rule (applied mechanically).** Run A, B-cma and C2-cma at total budgets 500, 1000 and
+2000 on the selection set, 3 seeds each (seeds 0, 1, 2): 15 runs per (condition, budget). The
+budget counts all evaluations, including the 3 reserved for the submission checks. A run
+"succeeds" when its submitted parameters pass the final check. Pick the SMALLEST budget where
+(1) A succeeds in at most 10% of its 15 runs (at most 1 run) AND (2) the best baseline (the larger
+success count of B-cma and C2-cma) is not at 100% (not 15/15). If no budget qualifies, STOP and
+report to Val; nothing else is run.
+
+**Test conditions.** A, B-cma, B-tpe, C-cma (expert_v1), C2-cma, C2-tpe, all at the chosen
+budget, 5 seeds (0-4) per task: 9 tasks x 5 seeds = 45 runs per condition.
+
+**Metrics.** Success rate with Wilson 95% intervals; success by 25/50/100% of the budget (from the
+checker-confirmed first success, as in `bench.batch`); wall-clock per run. A difference between
+two conditions is only called a difference when their Wilson intervals do not overlap.

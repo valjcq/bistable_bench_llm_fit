@@ -139,3 +139,30 @@ the success table. The toy default budget stays 200 until Val chooses it from th
   the metaschema and that the runtime validator (kept) agrees with jsonschema on examples.
 - **For the agent stage:** an unexpected exception in `Episode.call` is a bug. The runner must
   record it as `harness_error`, exclude that run from statistics and count such runs separately.
+
+## expert_v2: pre-registered definition (written and committed BEFORE any v2 run)
+Motivation (from `docs/phase0.md` section 3): the current expert objective (now called
+**expert_v1**) is flat on plateaus and does worse than the naive objective in the Phase 0 toy
+grid. expert_v2 is the candidate replacement. Definition, fixed before any run:
+
+For each target k:
+- complete the target state r*: observed populations = the target values; each unobserved
+  population solves its own fixed-point equation given the others (for ei_2pop:
+  r_I = F_I(w_IE * E* - w_II * r_I + I_I), unique on [0, r_max], solved with brentq).
+- residual_k = max abs over observed populations of (-r* + F(W r* + I)).
+- stab_k = max(0, max Re eig(J(r*)) * max(tau) + delta), delta in config (default 0.01).
+- score = mean over targets of (residual_k + lam * stab_k), lam in config (default 1.0).
+
+No fixed-point search, no simulation. One call = one evaluation. Config names:
+`scoring.v2_delta` (0.01) and `scoring.v2_lambda` (1.0). Success is still decided only by the
+checker (first-success confirmation as before). expert_v2 is exposed as an objective option in
+run_optimizer; the old objective is renamed `expert_v1` (kept, with its results; logs written
+before the rename say "expert", which means v1).
+
+Evaluation plan, fixed in advance: C-cma and C-tpe with expert_v2 on the toy grid (budget 200,
+5 tasks x 5 seeds), and C-cma with expert_v2 in the budget sweep (100/200/500/1000), reported
+next to the v1 and B results whatever the outcome. The toy is the development set: ei_2pop is
+NOT run with v2 at scale (it is the test set); no parameter (delta, lam) is tuned on ei_2pop.
+Implementation notes (not changes to the definition): at most one unobserved population is
+supported (the only case in the shipped models); the unobserved root is bracketed on
+[0, r_max] by the sign of g at the ends.

@@ -35,6 +35,7 @@ from bench.models.rate_network import (
     jacobian,
     rate_fn,
     residual_jacobian,
+    state_bounds,
 )
 
 
@@ -46,7 +47,7 @@ class CheckerConfig:
     eps_stab: float = 1e-6  # stable <=> max Re(eig) < -eps_stab (so marginal points are NOT stable)
     forbid_extra_stable_states: bool = False  # if True, extra stable states make success False
     # --- N=1 exact scan ---
-    n_grid_1d: int = 20001  # grid nodes on [0, r_max]
+    n_grid_1d: int = 20001  # grid nodes on the state range [lo, hi] (the logistic: [0, r_max])
     dedup_tol: float = 1e-9  # 1D roots closer than this are the same fixed point
     near_tangent_tol: float = 1e-4  # |g| below this at a local extremum triggers refinement
     # --- N>=2 search ---
@@ -54,7 +55,7 @@ class CheckerConfig:
     n_starts: int = 256  # number of global multi-start Newton runs
     n_unobserved_grid: int = 5  # local search: grid levels per UNobserved population
     residual_tol: float = 1e-10  # a Newton result counts as a root if max|g(r)| is below this
-    box_slack: float = 1e-9  # roots must lie in [-slack, r_max + slack]^N
+    box_slack: float = 1e-9  # roots must lie in [lo - slack, hi + slack] (the state bounds)
     dedup_tol_nd: float = 1e-6  # N>=2 roots closer than this (Euclidean) are the same
 
     def __post_init__(self) -> None:
@@ -133,8 +134,9 @@ def describe_fixed_point(
 def find_fixed_points_1d(net: NetArrays, cfg: CheckerConfig) -> list[float]:
     """All fixed points of a 1-population network, found exactly (up to the limit below).
 
-    Why this is exact: F is bounded in (0, r_max), so every fixed point of
-    g(r) = -r + F(w r + I) lies in [0, r_max]. We evaluate g on a dense grid there and
+    Why this is exact: F is bounded, so every fixed point of g(r) = -r + F(w r + I, r) lies in
+    the model's state bounds [lo, hi] (for the logistic [0, r_max]; see `state_bounds`). We
+    evaluate g on a dense grid there and
     collect roots from three sources:
       (a) grid nodes where g is exactly 0;
       (b) strict sign changes between neighbouring nodes, refined with brentq;
@@ -147,7 +149,7 @@ def find_fixed_points_1d(net: NetArrays, cfg: CheckerConfig) -> list[float]:
     which also makes sure a root sitting exactly on a node is counted once.
 
     Grid limit and why it is acceptable. With the default grid the spacing is
-    h = r_max / 20000 = 5e-5. A pair of roots can only slip through if
+    h = (hi - lo) / 20000 = 5e-5 for the logistic. A pair of roots can only slip through if
       1. both roots lie inside one cell (their separation is < h), and
       2. |g| at the neighbouring nodes is above `near_tangent_tol`, so (c) is not triggered.
     A pair that close means the parameters sit at a saddle-node (fold) within about 1e-5 or
@@ -158,15 +160,15 @@ def find_fixed_points_1d(net: NetArrays, cfg: CheckerConfig) -> list[float]:
     |lambda| ~ sqrt(distance to the fold): it is marginal, a useless target for fitting.
     A tangent pair closer than `dedup_tol` is reported as one (marginal, hence non-stable) root.
     """
-    r_max = float(net.r_max[0])
+    lo, hi = state_bounds(net)
     w = float(net.W[0, 0])
 
     def g(r: float) -> float:
-        return float(-r + rate_fn(np.array([w * r + net.I_ext[0]]), net)[0])
+        return float(-r + rate_fn(np.array([w * r + net.I_ext[0]]), net, np.array([r]))[0])
 
-    grid = np.linspace(0.0, r_max, cfg.n_grid_1d)
+    grid = np.linspace(float(lo[0]), float(hi[0]), cfg.n_grid_1d)
     # Same formula as g, vectorized over the grid for speed (rate_fn broadcasts over shape (M,)).
-    gv = -grid + rate_fn(w * grid + net.I_ext[0], net)
+    gv = -grid + rate_fn(w * grid + net.I_ext[0], net, grid)
 
     roots: list[float] = []
     # (a) exact zeros on nodes
@@ -203,8 +205,8 @@ def _newton(net: NetArrays, start: np.ndarray, cfg: CheckerConfig) -> np.ndarray
     """Run Newton (scipy `root`, method 'hybr') on g(r) = 0 from `start`; None if it fails.
 
     Uses the analytic Jacobian of g. A result is accepted only if it converged, the residual
-    is really tiny, and it lies inside the physical box [0, r_max]^N (F is bounded, so any
-    true fixed point does; a root outside would be a numerical artifact).
+    is really tiny, and it lies inside the model's state bounds (F is bounded, so any true
+    fixed point does; a root outside would be a numerical artifact).
     """
     res = root(
         lambda r: fixed_point_residual(r, net),
@@ -218,7 +220,8 @@ def _newton(net: NetArrays, start: np.ndarray, cfg: CheckerConfig) -> np.ndarray
     r = res.x
     if np.max(np.abs(fixed_point_residual(r, net))) > cfg.residual_tol:
         return None
-    if np.any(r < -cfg.box_slack) or np.any(r > net.r_max + cfg.box_slack):
+    lo, hi = state_bounds(net)
+    if np.any(r < lo - cfg.box_slack) or np.any(r > hi + cfg.box_slack):
         return None
     return r
 
@@ -237,14 +240,14 @@ def find_fixed_points_nd(
         This is the part that matters for success: if the parameters really realize a target,
         a fixed point sits next to it and Newton converges to it quickly and exactly.
     (b) GLOBAL: Newton from cfg.n_starts points of a seeded Latin hypercube over the box
-        [0, r_max]^N. It discovers the OTHER fixed points (extra stable states, the saddles
+        state box [lo, hi]^N. It discovers the OTHER fixed points (extra stable states, the saddles
         between states) that margins and the expert objective need. It can miss some.
 
     Roots from both parts are merged, de-duplicated by Euclidean distance (cfg.dedup_tol_nd)
     and sorted, so the result is deterministic.
     """
     n = model.n_pops
-    r_max = net.r_max
+    lo, hi = state_bounds(net)
     obs = model.observed_idx
     unobs = np.array([i for i in range(n) if i not in set(obs.tolist())], dtype=int)
 
@@ -253,11 +256,11 @@ def find_fixed_points_nd(
     for target in targets:
         for combo in itertools.product(levels, repeat=len(unobs)):
             s = np.zeros(n)
-            s[obs] = np.clip(target, 0.0, r_max[obs])
-            s[unobs] = np.array(combo, dtype=float) * r_max[unobs]
+            s[obs] = np.clip(target, lo[obs], hi[obs])
+            s[unobs] = lo[unobs] + np.array(combo, dtype=float) * (hi - lo)[unobs]
             starts.append(s)
     lhs = qmc.LatinHypercube(d=n, rng=np.random.default_rng(cfg.seed)).random(cfg.n_starts)
-    starts += list(lhs * r_max)
+    starts += list(lo + lhs * (hi - lo))
 
     unique: list[np.ndarray] = []
     for s in starts:

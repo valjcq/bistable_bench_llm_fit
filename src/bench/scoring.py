@@ -22,7 +22,7 @@ import numpy as np
 from scipy.optimize import brentq
 
 from bench.checker import CheckResult
-from bench.models.rate_network import RateNetwork, fixed_point_residual, jacobian
+from bench.models.rate_network import RateNetwork, fixed_point_residual, jacobian, state_bounds
 from bench.simulate import SimConfig, simulate_batch
 
 
@@ -51,8 +51,8 @@ def naive_objective(
     """
     if len(ic_fractions) != len(targets):
         raise ValueError("need one initial-condition fraction per target")
-    r_max = model.net(params).r_max
-    x0s = np.asarray(ic_fractions)[:, None] * r_max[None, :]  # (K, N)
+    lo, hi = model.state_bounds(params)
+    x0s = lo[None, :] + np.asarray(ic_fractions)[:, None] * (hi - lo)[None, :]  # (K, N)
     sims = simulate_batch(model, params, x0s, T, sim_cfg)
     final_observed = np.array([s.final_state for s in sims])[:, model.observed_idx]
     return float(np.abs(final_observed - targets).max(axis=1).mean())
@@ -88,7 +88,8 @@ def expert_v2_terms(
     Each target is completed to a full state r*: observed populations take the target values,
     and the one unobserved population (if any) solves its own fixed-point equation
     -x + F_i(W_ii x + sum_{j != i} W_ij r_j + I_i) = 0 given the others. The left side is >= 0 at
-    x = 0 and <= 0 at x = r_max (F lies in [0, r_max]), so a root is bracketed and `brentq`
+    x = lo and <= 0 at x = hi (F keeps the state inside the model's bounds, see
+    `state_bounds`), so a root is bracketed and `brentq`
     finds it; for the E/I model's inhibitory population it is also unique (decreasing in x).
 
     residual_k says how far r* is from being a fixed point (zero iff the target IS one);
@@ -101,6 +102,7 @@ def expert_v2_terms(
     if len(unobs) > 1:
         raise ValueError("expert_v2 supports at most one unobserved population")
     tau_max = float(net.tau.max())
+    lo_b, hi_b = state_bounds(net)
     residuals, stabs = [], []
     for target in targets:
         r = np.zeros(model.n_pops)
@@ -113,14 +115,14 @@ def expert_v2_terms(
                 r2[i] = x
                 return float(fixed_point_residual(r2, net)[i])
 
-            hi = float(net.r_max[i])
-            g_lo, g_hi = g(0.0), g(hi)
+            x_lo, x_hi = float(lo_b[i]), float(hi_b[i])
+            g_lo, g_hi = g(x_lo), g(x_hi)
             if g_lo <= 0.0:
-                r[i] = 0.0
+                r[i] = x_lo
             elif g_hi >= 0.0:
-                r[i] = hi
+                r[i] = x_hi
             else:
-                r[i] = brentq(g, 0.0, hi, xtol=1e-15, rtol=4 * np.finfo(float).eps)
+                r[i] = brentq(g, x_lo, x_hi, xtol=1e-15, rtol=4 * np.finfo(float).eps)
         residuals.append(float(np.abs(fixed_point_residual(r, net)[obs]).max()))
         max_re = float(np.linalg.eigvals(jacobian(r, net)).real.max())
         stabs.append(max(0.0, max_re * tau_max + delta))

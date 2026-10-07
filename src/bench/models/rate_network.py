@@ -20,43 +20,66 @@ from bench.models.base import NetArrays, ParamSpace
 BuildFn = Callable[[Mapping[str, float]], NetArrays]
 
 
-def rate_fn(u: np.ndarray, net: NetArrays) -> np.ndarray:
-    """Firing-rate nonlinearity: turn each population's total input u into a rate.
+def sigmoid(u: np.ndarray, net: NetArrays) -> np.ndarray:
+    """The sigmoid S(u) of each population (variant "logistic" or "wc_shifted", see NetArrays).
 
-    F(u) = r_max / (1 + exp(-(u - theta) / k)), a sigmoid between 0 and r_max.
-    theta is the input at which the rate is half of r_max; k sets how sharp the
-    switch is (small k = nearly a step). This is the only nonlinearity in the
-    model, and it is what makes multistability possible: a sigmoid fed back
-    through a strong enough positive loop can cross the identity line several times.
-
-    `u` has shape (N,), one input per population. Returns shape (N,).
-    `expit` is scipy's overflow-safe logistic, so huge |u| gives 0 or r_max, not nan.
+    S = expit((u - theta) / k) - shift, where shift is 0 for the logistic and
+    1 / (1 + exp(theta / k)) for the Wilson-Cowan shifted form (eq. 15), whose value at u = 0
+    is exactly 0. `expit` is scipy's overflow-safe logistic, so huge |u| gives the asymptote.
     """
-    return net.r_max * expit((u - net.theta) / net.k)
+    return expit((u - net.theta) / net.k) - net.shift
 
 
-def rate_deriv(u: np.ndarray, net: NetArrays) -> np.ndarray:
-    """Slope of the sigmoid, F'(u), evaluated per population.
+def _amplitude(net: NetArrays, r: np.ndarray | None) -> np.ndarray:
+    """amp - rref * r: the room left for firing (the paper's refractory factor, k - r E).
 
-    Used to build the Jacobian: F' says how strongly a small change in input u
-    changes the output rate, i.e. the "gain" of each population at the current
-    operating point. It peaks at r_max / (4k) when u = theta and vanishes when the
-    population is saturated (near 0 or r_max); saturated populations are what make
-    the stable states of a bistable network stable.
+    `r` is only needed when some rref is nonzero; the plain rate network (rref = 0) can be
+    evaluated from the input alone, which keeps the old call signatures valid.
+    """
+    if r is None:
+        if np.any(net.rref):
+            raise ValueError("the state r is required when the refractory coefficient is nonzero")
+        return net.r_max
+    return net.r_max - net.rref * r
 
-    Analytic form: with s = logistic((u - theta) / k), F' = (r_max / k) * s * (1 - s).
-    Tested against finite differences in tests/test_model.py.
+
+def rate_fn(u: np.ndarray, net: NetArrays, r: np.ndarray | None = None) -> np.ndarray:
+    """Response of each population to its total input u: F = (amp - rref * r) * S(u).
+
+    S is a sigmoid between its asymptotes; theta is the input at which it switches (maximum
+    slope) and k the width. This is the only nonlinearity in the model, and it is what makes
+    multistability possible: a sigmoid fed back through a strong enough positive loop can cross
+    the identity line several times. With rref = 0 (the logistic rate network) F = r_max * S(u)
+    depends on u alone and `r` may be omitted; with a refractory term (Wilson-Cowan) the state
+    `r` must be given because F then also depends on the population's own rate.
+
+    `u` has shape (N,) (or (..., N)), one input per population. Returns the same shape.
+    """
+    return _amplitude(net, r) * sigmoid(u, net)
+
+
+def rate_deriv(u: np.ndarray, net: NetArrays, r: np.ndarray | None = None) -> np.ndarray:
+    """Slope of the response with respect to its input, dF/du = (amp - rref * r) * S'(u).
+
+    Used to build the Jacobian: it says how strongly a small change in input u changes the
+    output, i.e. the "gain" of each population at the current operating point. For the logistic
+    it peaks at r_max / (4k) when u = theta and vanishes when the population is saturated;
+    saturated populations are what make the stable states of a bistable network stable.
+
+    Analytic form: with s = logistic((u - theta) / k), S' = s * (1 - s) / k (the shift of the
+    Wilson-Cowan sigmoid is a constant, so it does not change the slope). Tested against finite
+    differences in tests/test_model.py.
     """
     s = expit((u - net.theta) / net.k)
-    return net.r_max / net.k * s * (1.0 - s)
+    return _amplitude(net, r) / net.k * s * (1.0 - s)
 
 
 def rhs(r: np.ndarray, net: NetArrays) -> np.ndarray:
-    """Right-hand side of the dynamics: dr_i/dt = (-r_i + F_i(u_i)) / tau_i.
+    """Right-hand side of the dynamics: dr_i/dt = (-r_i + F_i) / tau_i.
 
     This is what the simulator integrates. Each population relaxes toward the rate
-    its input demands, F(W r + I_ext), at a speed set by its time constant tau.
-    Where this is zero for every population, r is a fixed point.
+    its input demands, F = (amp - rref r) S(W r + I_ext), at a speed set by its time constant
+    tau. Where this is zero for every population, r is a fixed point.
 
     `r` may be one state, shape (N,), or a batch of states, shape (n, N): the simulator
     integrates many initial conditions at once. The input u_i = sum_j W_ij r_j is written as
@@ -65,34 +88,40 @@ def rhs(r: np.ndarray, net: NetArrays) -> np.ndarray:
     independent of what else is in the batch (BLAS may pick different kernels per shape).
     """
     u = (net.W * r[..., None, :]).sum(axis=-1) + net.I_ext
-    return (-r + rate_fn(u, net)) / net.tau
+    return (-r + rate_fn(u, net, r)) / net.tau
 
 
 def fixed_point_residual(r: np.ndarray, net: NetArrays) -> np.ndarray:
-    """g(r) = -r + F(W r + I_ext): the dynamics without the 1/tau factor.
+    """g(r) = -r + F(W r + I_ext, r): the dynamics without the 1/tau factor.
 
     The checker looks for roots of g, i.e. the fixed points. tau only rescales how
     fast the system moves, never where it rests, so dropping it keeps the root
     finding independent of the time constants (and better scaled numerically).
-    For N=1 the checker scans this function along [0, r_max] for sign changes.
+    For N=1 the checker scans this function along the state range for sign changes.
     """
-    return -r + rate_fn(net.W @ r + net.I_ext, net)
+    return -r + rate_fn(net.W @ r + net.I_ext, net, r)
 
 
 def residual_jacobian(r: np.ndarray, net: NetArrays) -> np.ndarray:
-    """Derivative of the residual g: dg/dr = -Id + diag(F'(u)) @ W.
+    """Derivative of the residual g: dg/dr = -Id + diag(dF/du) @ W - diag(rref * S(u)).
 
     Handed to Newton's method (scipy.optimize.root) so it can converge quickly to a
     fixed point without estimating derivatives numerically. Row i of the product is
-    F'(u_i) times row i of W: population i's gain scales *its own* inputs, which is
-    why the gain multiplies W from the left (row scaling), not the right.
+    dF/du_i times row i of W: population i's gain scales *its own* inputs, which is
+    why the gain multiplies W from the left (row scaling), not the right. The last term only
+    exists with a refractory coefficient: F_i also depends on r_i directly, through the factor
+    (amp_i - rref_i r_i), with derivative -rref_i S(u_i). For Wilson-Cowan this is
+    J11 = [-1 - r_e S_e + (k_e - r_e E) c1 S_e'] / tau_e (model card, "Jacobian").
     """
     u = net.W @ r + net.I_ext
-    return -np.eye(len(r)) + rate_deriv(u, net)[:, None] * net.W
+    jac = -np.eye(len(r)) + rate_deriv(u, net, r)[:, None] * net.W
+    if np.any(net.rref):
+        jac = jac - np.diag(net.rref * sigmoid(u, net))
+    return jac
 
 
 def jacobian(r: np.ndarray, net: NetArrays) -> np.ndarray:
-    """Jacobian of the dynamics at state r: J = diag(1/tau) @ (-Id + diag(F'(u)) @ W).
+    """Jacobian of the dynamics at state r: J = diag(1/tau) @ dg/dr.
 
     This decides whether a fixed point is stable. Near a fixed point the system
     behaves like dx/dt = J x, so if every eigenvalue of J has negative real part,
@@ -102,6 +131,34 @@ def jacobian(r: np.ndarray, net: NetArrays) -> np.ndarray:
     point; elsewhere it is just the local slope of the flow.
     """
     return residual_jacobian(r, net) / net.tau[:, None]
+
+
+def state_bounds(net: NetArrays) -> tuple[np.ndarray, np.ndarray]:
+    """Per-population bounds (lo, hi) of every state the dynamics can occupy.
+
+    Every fixed point lies inside [lo, hi], and a trajectory that starts inside stays inside.
+    Derivation. The response is F = (amp - rref r) S(u) with the sigmoid S confined to the open
+    interval (S_min, S_max) = (-shift, 1 - shift) by its asymptotes (shift = 0 for the
+    logistic). At a steady state r = (amp - rref r) S, i.e. r = amp S / (1 + rref S), which is
+    increasing in S (derivative amp / (1 + rref S)^2 > 0 for rref S > -1). Hence
+        lo = amp S_min / (1 + rref S_min),    hi = amp S_max / (1 + rref S_max).
+    Invariance: at r = hi the flow is -hi + (amp - rref hi) S(u) <= -hi + (amp - rref hi) S_max
+    = 0, and symmetrically >= 0 at r = lo, so the box cannot be left (amp - rref r stays > 0
+    inside it for the shipped parameters, amp > rref hi).
+    Cases.
+      * Logistic (rref = 0, shift = 0): [0, amp], the box [0, r_max] used so far.
+      * Wilson-Cowan with k = S(+inf) = S_max (the card's interpretation): hi = k^2 / (1 + k),
+        about 0.48 for the card's sets, and lo slightly negative (E, I may dip below their
+        background; the card calls small negative values "depression below background").
+      * Wilson-Cowan with k = 1: S(+inf) < 1, hi = S_max / (1 + S_max) (a bit below 1/2). We use
+        the true asymptote S(+inf) rather than k, which keeps the bound tight; k itself would
+        also be valid but slightly loose.
+    """
+    s_lo = 0.0 - net.shift  # (0.0 - 0.0 keeps +0.0 for the logistic, never -0.0)
+    s_hi = 1.0 - net.shift
+    lo = net.r_max * s_lo / (1.0 + net.rref * s_lo)
+    hi = net.r_max * s_hi / (1.0 + net.rref * s_hi)
+    return lo, hi
 
 
 @dataclass(frozen=True)
@@ -134,6 +191,15 @@ class RateNetwork:
         so every comparison between a state and a target uses `r[observed_idx]`.
         """
         return np.array([self.populations.index(p) for p in self.observed])
+
+    def state_bounds(self, params: Mapping[str, float]) -> tuple[np.ndarray, np.ndarray]:
+        """Model-provided state bounds (lo, hi) per population for these parameters.
+
+        Every place that used to assume the state lies in [0, r_max] (the 1-D scan, the global
+        search box, the unobserved-population solve, initial conditions of the naive objective,
+        the planting window) asks this instead. See `state_bounds` for the derivation.
+        """
+        return state_bounds(self.net(params))
 
     def net(self, params: Mapping[str, float]) -> NetArrays:
         """Turn a dict of the FREE parameters into the arrays the dynamics need.

@@ -20,14 +20,39 @@ class NetArrays:
 
     W[i, j] is the weight from population j onto population i, so u = W @ r + I_ext.
     Dale's law is already applied: columns of inhibitory populations are <= 0.
+
+    The dynamics are  tau_i dr_i/dt = -r_i + (amp_i - rref_i * r_i) * S_i(u_i)  where
+      * S is a sigmoid of the input, chosen by `variant`:
+          "logistic"   S(u) = 1 / (1 + exp(-(u - theta) / k))                     (0 to 1)
+          "wc_shifted" S(u) = 1 / (1 + exp(-(u - theta) / k)) - 1 / (1 + exp(theta / k))
+                       (Wilson & Cowan 1972, eq. 15 with a = 1/k: shifted so S(0) = 0);
+      * amp is the field `r_max` (kept under its old name for backward compatibility; for the
+        logistic model it IS the maximum rate; for Wilson-Cowan it is the card's k_e, k_i);
+      * rref >= 0 is the refractory coefficient (the card's r_e, r_i). With rref = 0 the
+        model is the plain rate network  tau dr/dt = -r + r_max * S(u)  used so far.
+    The sigmoid width `k` here is NOT the Wilson-Cowan k: it is 1 / a.
     """
 
     W: np.ndarray  # (N, N)
     I_ext: np.ndarray  # (N,)
     tau: np.ndarray  # (N,)
     theta: np.ndarray  # (N,)
-    k: np.ndarray  # (N,)
-    r_max: np.ndarray  # (N,)
+    k: np.ndarray  # (N,) sigmoid width (1 / slope a)
+    r_max: np.ndarray  # (N,) amplitude of the response: max rate (logistic) / card's k_i (WC)
+    rref: np.ndarray | None = None  # (N,) refractory coefficient; None = zeros
+    variant: str = "logistic"  # "logistic" | "wc_shifted"
+    shift: np.ndarray = field(init=False, repr=False, compare=False)  # derived: S = sigma - shift
+
+    def __post_init__(self) -> None:
+        if self.variant not in ("logistic", "wc_shifted"):
+            raise ValueError(f"unknown sigmoid variant {self.variant!r}")
+        zeros = np.zeros_like(np.asarray(self.r_max, dtype=float))
+        object.__setattr__(self, "rref", zeros if self.rref is None else np.asarray(self.rref))
+        if self.variant == "wc_shifted":  # sigma(-theta / k): the logistic's value at u = 0
+            shift = 1.0 / (1.0 + np.exp(self.theta / self.k))
+        else:
+            shift = zeros
+        object.__setattr__(self, "shift", shift)
 
 
 # Absolute slack allowed at the bounds (round-off from float arithmetic, e.g. a value

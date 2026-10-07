@@ -33,6 +33,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 src = ["src", "tests"]
+extend-exclude = ["scripts/wc_check.py"]  # committed as given with the model card
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

@@ -129,8 +129,12 @@ def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None =
 
     for attempt in range(1, tc.max_attempts + 1):
         params = model.space.from_unit(rng.random(model.space.dim))
-        r_max_obs = model.net(params).r_max[model.observed_idx]
-        lo, hi = tc.target_window[0] * r_max_obs, tc.target_window[1] * r_max_obs
+        # The window is a fraction of the FEASIBLE range of the observed populations (the model's
+        # state bounds; [0, r_max] for the logistic models).
+        b_lo, b_hi = model.state_bounds(params)
+        b_lo, b_hi = b_lo[model.observed_idx], b_hi[model.observed_idx]
+        lo = b_lo + tc.target_window[0] * (b_hi - b_lo)
+        hi = b_lo + tc.target_window[1] * (b_hi - b_lo)
 
         def in_window(rows: np.ndarray, lo: np.ndarray = lo, hi: np.ndarray = hi) -> bool:
             return bool(np.all((rows >= lo) & (rows <= hi)))

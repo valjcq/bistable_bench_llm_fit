@@ -39,8 +39,9 @@ class TaskConfig:
     noise: float = 0.0  # std (in rate units) of Gaussian noise added to the planted targets
     seed: int = 0  # default seed for task generation / environment randomness
     forbid_extra_stable_states: bool = False  # if True, extra stable states make success False
-    # Planted target rates must lie inside this window, as fractions of r_max: a target near
-    # 0 or r_max sits in the saturated tail where a tolerance of `tol` is meaningless.
+    # Planted target rates must lie inside this window, as fractions of the feasible range of the
+    # observed populations (the model's state bounds; [0, r_max] for the logistic models): a
+    # target near either end sits in the saturated tail where a tolerance of `tol` is meaningless.
     target_window: tuple[float, float] = (0.05, 0.95)
     # Planted targets must be farther apart than factor * tol (max abs difference over observed
     # populations), so their tolerance boxes are clearly distinct.
@@ -91,7 +92,8 @@ class SimulatorConfig:
 @dataclass(frozen=True)
 class ScoringConfig:
     # Naive objective: target i is compared with the end state of a simulation started with
-    # EVERY population at naive_ic_fractions[i] * r_max. One entry per target (K entries);
+    # EVERY population at lo + naive_ic_fractions[i] * (hi - lo) of its state bounds (r_max * the
+    # fraction for the logistic models). One entry per target (K entries);
     # targets are sorted by increasing rate, so a low IC goes with the low target.
     naive_ic_fractions: tuple[float, ...] = (0.0, 1.0)
     # Expert objective (definition in NOTES.md): stability margin demanded of every target state, in

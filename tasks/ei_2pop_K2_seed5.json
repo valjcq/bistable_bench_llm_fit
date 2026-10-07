@@ -1,0 +1,30 @@
+{
+  "format_version": 1,
+  "model": "ei_2pop",
+  "observed": [
+    "E"
+  ],
+  "seed": 5,
+  "K": 2,
+  "targets": [
+    [
+      0.09477292692696614
+    ],
+    [
+      0.8131162225440909
+    ]
+  ],
+  "planted_params": {
+    "w_EE": 5.901684775083189,
+    "w_EI": 3.444599279872913,
+    "w_IE": 3.5265429067257203,
+    "w_II": 12.471913986493398,
+    "I_E": 3.0749884361336766,
+    "I_I": 6.838975467893543
+  },
+  "generation_hash": "e341924dd1f57229837b86efce1f704d39cc56ecd6f8be9a9f8a2ad88ab440ae",
+  "n_attempts": 1227,
+  "rejections": {
+    "fewer_than_K_stable_states_in_window": 1226
+  }
+}

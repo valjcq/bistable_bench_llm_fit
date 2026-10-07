@@ -1,0 +1,23 @@
+# Excitatory + inhibitory population (Wilson-Cowan-style). Bounds are generic, not taken from
+# any paper. Targets come from planting (see tasks.py), not from this file.
+name: ei_2pop
+builder: ei_2pop
+populations: [E, I]
+types: [E, I]
+observed: [E]  # partial observation: targets constrain E only, I is free
+free:
+  w_EE: {low: 0.0, high: 20.0, log: false}  # E -> E (excitatory)
+  w_EI: {low: 0.0, high: 20.0, log: false}  # I -> E (stored positive, applied as -w_EI)
+  w_IE: {low: 0.0, high: 20.0, log: false}  # E -> I
+  w_II: {low: 0.0, high: 20.0, log: false}  # I -> I (stored positive, applied as -w_II)
+  I_E:   {low: 0.0, high: 10.0, log: false} # external drive to E
+  I_I:   {low: 0.0, high: 10.0, log: false} # external drive to I
+fixed:
+  tau_E: 10.0   # unequal time constants on purpose (E slower than I)
+  tau_I: 5.0
+  theta_E: 5.0  # fixed: only (I - theta) matters, so theta would be redundant with the drive
+  theta_I: 5.0
+  k_E: 1.0
+  k_I: 1.0
+  r_max_E: 1.0
+  r_max_I: 1.0

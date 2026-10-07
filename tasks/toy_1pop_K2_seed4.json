@@ -1,0 +1,27 @@
+{
+  "format_version": 1,
+  "model": "toy_1pop",
+  "observed": [
+    "R"
+  ],
+  "seed": 4,
+  "K": 2,
+  "targets": [
+    [
+      0.05153058955301019
+    ],
+    [
+      0.8505657654285811
+    ]
+  ],
+  "planted_params": {
+    "w": 8.920659905575762,
+    "I": 0.07716550353634055,
+    "k": 1.5323196937519588
+  },
+  "generation_hash": "d4147d27d8828dd9dbe690b558b9e47464e736c4a3fbf1c5006f440cac09e486",
+  "n_attempts": 2057,
+  "rejections": {
+    "fewer_than_K_stable_states_in_window": 2056
+  }
+}

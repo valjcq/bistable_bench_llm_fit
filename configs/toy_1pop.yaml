@@ -1,0 +1,14 @@
+# Single self-excitatory population. Bistable when w * r_max / (4 k) > 1 (roughly).
+name: toy_1pop
+builder: toy_1pop
+populations: [R]
+types: [E]
+observed: [R]
+free:
+  w:     {low: 0.5,  high: 20.0, log: false}  # recurrent excitation (>= 0, sign applied in builder)
+  I:     {low: 0.0,  high: 10.0, log: false}  # external input
+  k:     {low: 0.2,  high: 3.0,  log: true}   # sigmoid width
+fixed:
+  tau: 10.0
+  r_max: 1.0
+  theta: 5.0  # fixed: only (I - theta) matters, so theta would be redundant with I

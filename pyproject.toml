@@ -1,0 +1,28 @@
+[project]
+name = "bistable-fit-bench"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["numpy", "scipy>=1.15", "pyyaml"]  # 1.15: qmc samplers take `rng=`
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+bench = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

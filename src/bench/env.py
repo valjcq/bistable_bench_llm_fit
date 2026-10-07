@@ -22,7 +22,7 @@ from bench.checker import CheckResult, check
 from bench.config import ExperimentConfig
 from bench.models.base import ParamSpace
 from bench.scoring import EvaluationMetric
-from bench.simulate import SimResult, simulate_batch
+from bench.simulate import SimResult, simulate_batch, t_max
 from bench.tasks import Task
 
 EventHook = Callable[[dict[str, Any]], None]
@@ -176,6 +176,10 @@ class Environment:
         x0 = np.asarray(x0, dtype=float)
         if x0.shape != (self._model.n_pops,) or not T > 0:
             raise ValueError(f"need x0 of shape ({self._model.n_pops},) and T > 0 (free)")
+        self._validate(params)
+        cap = t_max(self._config.simulator.sim_config(), self._model.net(params))
+        if T > cap:  # checked before charging: a refused horizon costs nothing
+            raise ValueError(f"T={T} exceeds the simulation time cap T_max={cap} (free)")
         index = self._begin("simulate", params)
         result = simulate_batch(
             self._model, params, x0[None, :], T, self._config.simulator.sim_config()

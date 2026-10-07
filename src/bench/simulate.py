@@ -30,10 +30,32 @@ class SimConfig:
     # time scale of the network is of order max(tau), so a window of a few max(tau)
     # separates a real fixed point from a momentary slow-down near a saddle.
     hold_tau_factor: float = 5.0
+    # Longest simulated time one Environment.simulate call may ask for. None means
+    # DEFAULT_T_MAX_TAU_FACTOR * max(tau) (resolved per network by `t_max`). Without a cap, one
+    # budgeted call could burn unlimited compute, since cost is counted in evaluations.
+    T_max: float | None = None
 
     def __post_init__(self) -> None:
         if self.dt <= 0 or self.flow_tol <= 0 or self.hold_tau_factor <= 0:
             raise ValueError("invalid SimConfig")
+        if self.T_max is not None and self.T_max <= 0:
+            raise ValueError("SimConfig.T_max must be > 0")
+
+
+DEFAULT_T_MAX_TAU_FACTOR = 200.0
+
+
+def t_max(cfg: SimConfig, net: NetArrays) -> float:
+    """The time cap that applies to `net`: the configured T_max, else 200 * max(tau).
+
+    200 slowest time constants is far beyond any relaxation to a fixed point (the settle window
+    is only 5 of them), so the cap never bites legitimate use; it only stops absurd horizons.
+    It is enforced by Environment.simulate (the agent-facing door), not by the low-level
+    integrator, which tests and the checker cross-checks call directly with long horizons.
+    """
+    if cfg.T_max is not None:
+        return cfg.T_max
+    return DEFAULT_T_MAX_TAU_FACTOR * float(net.tau.max())
 
 
 @dataclass(frozen=True)

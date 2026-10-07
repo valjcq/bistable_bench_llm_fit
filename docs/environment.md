@@ -67,7 +67,7 @@ Bounds are generic, not taken from a paper. Observing E only is *partial observa
 
 ## 5. What a task is
 
-A task is **K = 2 target states**, each a vector over the observed populations, plus a tolerance (**tol = 0.02**, `TODO(val): rationale for 0.02`).
+A task is **K = 2 target states**, each a vector over the observed populations, plus a tolerance (**tol = 0.02**). tol = 0.02 is 2% of the rate range. It is tight enough that saturated or approximate states don't pass, and loose enough that optimizers can reach it within budget. It is a difficulty knob, and the 3*tol separation guard depends on it.
 
 **Planting.** To guarantee a solution exists, `make_task` draws random parameters until they have enough usable stable states, and uses K of those states as targets. In order:
 
@@ -135,9 +135,10 @@ They must not be mixed: the metric is flat (success or not) and would give an op
 
 - **One evaluation each:** `evaluate` (either objective), `check`, `simulate`. A naive evaluation runs K trajectories but costs one.
 - **Raises:** `BudgetExhausted`, checked *before* any work. With budget L, calls 1..L succeed and L+1 raises (default L = 200).
-- **Free:** malformed calls (unknown objective, missing or out-of-bounds parameters, wrong `x0` shape) raise `ValueError` without charging; `final_report`; read-only information.
+- **Time cap:** `simulate` accepts `T` up to `T_max` (`SimConfig.T_max`, default 200 · max(τ) = 2000 here). A larger `T` raises `ValueError` and costs nothing. The naive objective uses the fixed `simulator.T` from the config, which must stay below the cap.
+- **Free:** malformed calls (unknown objective, missing or out-of-bounds parameters, wrong `x0` shape, `T` above `T_max`) raise `ValueError` without charging; `final_report`; read-only information.
 - **Private:** model, budget counter, hidden planted parameters. `targets` returns a copy; `space.fixed` is read-only.
-- **`final_report`:** the one unbudgeted method, for the referee path (later only `submit()`). It is not in `BUDGETED_METHODS`. Note that `check` already returns `success` for any parameters at the price of one evaluation, so `final_report` is not a secret oracle. What it adds is being unbudgeted and logged as the official result.
+- **`final_report`:** the one unbudgeted method, for the referee path (later only `submit()`). It is not in `BUDGETED_METHODS`. Note that `check` already returns `success` for any parameters at the price of one evaluation, so `final_report` is not a secret oracle. This is intentional: the agent knows the targets and tol anyway, so hiding the verdict would add nothing. If a hidden component is wanted later, it is a held-out robustness check at submit. What it adds is being unbudgeted and logged as the official result.
 
 ## 10. Reproducibility
 
@@ -169,8 +170,20 @@ They must not be mixed: the metric is flat (success or not) and would give an op
 - Planting is costly because saturated or monostable draws are common; the toy has a heavy tail.
 - With $\tau_I=5$ oscillations are rare (~0.1% of random sets vs ~2% at $\tau_I=20$), so oscillatory difficulty is a knob for later.
 - The expert objective gives weak signal in monostable regions.
-- Compute is not budgeted: `simulate` accepts any $T$ for one evaluation.
-- Open decisions: [NOTES.md](../NOTES.md). `TODO(val): define "condition B" (the naive-objective condition) for readers outside the project.`
+- Compute is not budgeted: a `simulate` call costs one evaluation whatever its $T$, but $T$ is capped at `T_max` (section 9).
+- Open decisions: [NOTES.md](../NOTES.md).
+
+**Experimental conditions** (budget-matched: every condition gets the same evaluation budget):
+
+| | Who searches | Objective |
+|---|---|---|
+| A | random search | expert |
+| B | optimizer (CMA-ES or TPE) | naive |
+| C | same optimizer | expert (the human baseline) |
+| D | LLM agent, open model | chosen by the agent |
+| E | same agent, closed API model | chosen by the agent |
+
+At the end of a baseline episode (A-C) the best parameters by the condition's objective are submitted.
 
 ## 13. Minimal usage
 

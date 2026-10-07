@@ -2,7 +2,13 @@
 name = "bistable-fit-bench"
 version = "0.1.0"
 requires-python = ">=3.11"
-dependencies = ["numpy", "scipy>=1.15", "pyyaml"]  # 1.15: qmc samplers take `rng=`
+dependencies = [
+    "numpy",
+    "scipy>=1.15",
+    "pyyaml",
+    "optuna==5.0.0",
+    "cmaes==0.13.1",
+]  # scipy 1.15: qmc samplers take `rng=`; optuna and cmaes pinned for reproducibility
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]

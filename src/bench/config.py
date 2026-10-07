@@ -76,6 +76,7 @@ class SimulatorConfig:
     flow_tol: float = 1.0e-6
     hold_tau_factor: float = 5.0
     T: float = 500.0  # max simulated time; several times the slowest tau
+    T_max: float | None = None  # cap on any Environment.simulate horizon; None = 200 * max(tau)
 
     def __post_init__(self) -> None:
         if self.T <= 0:
@@ -83,7 +84,7 @@ class SimulatorConfig:
         self.sim_config()  # validates dt, flow_tol, hold_tau_factor
 
     def sim_config(self) -> SimConfig:
-        return SimConfig(self.dt, self.flow_tol, self.hold_tau_factor)
+        return SimConfig(self.dt, self.flow_tol, self.hold_tau_factor, self.T_max)
 
 
 @dataclass(frozen=True)

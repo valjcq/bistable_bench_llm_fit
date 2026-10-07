@@ -156,3 +156,14 @@ def test_final_report_is_not_reachable_through_the_budgeted_interface(cfg_toy, t
     env.final_report(p)
     assert env.n_evaluations == used
     assert events[-1]["event"] == "final_report"
+
+
+def test_simulate_beyond_t_max_is_refused_for_free(cfg_toy, task_toy):
+    """T above the cap (default 200 * max tau = 2000 for the toy) raises and costs nothing."""
+    env = _env(cfg_toy, task_toy)
+    x0, params = np.array([0.5]), task_toy.planted_params
+    with pytest.raises(ValueError, match="T_max"):
+        env.simulate(params, x0, 2000.5)
+    assert env.n_evaluations == 0
+    env.simulate(params, x0, 2000.0)  # exactly at the cap is allowed
+    assert env.n_evaluations == 1

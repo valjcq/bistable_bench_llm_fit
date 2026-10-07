@@ -43,3 +43,16 @@ All four checkpoints are implemented. Things to keep in mind when building optim
   interface (`env.BUDGETED_METHODS`); later only `submit()` will call it.
 - **Toy planting cap** is 20000 (`max_attempts`); the toy needs ~900 draws on average with a heavy
   tail. `max_attempts` is excluded from `generation_hash` (it only decides when to give up).
+
+## Optimizers (checkpoint 5)
+- `src/bench/optimizers/` never imports model/checker/env (a test checks the imports). The
+  environment side is `src/bench/optimizer_runs.py` (`RunRegistry`: unit -> params, seeds, runs).
+- **Converged flag** (same for all optimizers): best-so-far improved by < 1e-6 over the last
+  max(20, 20% of run budget) evaluations, and more than that many evaluations were done. It is
+  informational: runs spend their whole budget unless `stop_on_converged=True` (off for baselines
+  so conditions stay budget-matched; then `stopped_reason="converged"`).
+- CMA-ES: Optuna samples trial 0 independently, so we enqueue x0 (or the cube centre) as trial 0;
+  CMA then starts a cloud centred on x0. `x0`/`sigma0` are deprecated in Optuna >= 4.9 (removed
+  in v6); we pin optuna 5.0.0 and silence the warning.
+- Simulation time cap: `Environment.simulate` refuses T > T_max (default 200 * max tau), for free.
+  The low-level `simulate_batch` is uncapped (tests use long horizons).

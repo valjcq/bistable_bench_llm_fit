@@ -114,3 +114,18 @@ toy budget after the first runs (as planned).
 ## Planned for checkpoint 8 (in addition to the spec)
 Toy budget sweep at 100, 200, 500, 1000 evaluations for A, B-cma, C-cma (5 tasks x 5 seeds), with
 the success table. The toy default budget stays 200 until Val chooses it from that table.
+
+## Tool layer and dummy agent (checkpoint 7)
+- `src/bench/tools.py`: `Episode.call(name, arguments)` is the one entry point (validate against the
+  tool's JSON Schema, run, convert failures to `{"error": {...}}`, log). `tool_specs()` returns
+  name/description/`input_schema` per tool; parameter names and bounds come from the task.
+- Error types: invalid_argument (free, logged `invalid: true`), budget_exhausted, episode_over
+  (every tool after submit, also logged invalid), unknown_tool. Unexpected exceptions are bugs and
+  propagate on purpose.
+- Log roles: tool-call lines and `check`/`simulate` calls the agent makes itself are `agent`; the
+  evaluations inside run_optimizer are `optimizer`; `final_report` is `harness`. A tool call
+  produces its environment lines first, then its own line (so submit follows final_report).
+- Schemas are checked with `src/bench/schema.py`, a small validator for the keyword subset we use
+  (no `jsonschema` dependency was added). A test keeps the schemas inside that subset.
+- Dummy agent (`agent/scripted.py`): second run gets the rest of the budget minus MARGIN=5, so an
+  episode where the check fails spends budget - 5 evaluations.

@@ -12,8 +12,9 @@ How the summary numbers are defined
   parameters pass the checker; the median is over the runs that have one (its n is printed). It
   is computed after the fact from events.jsonl, not by the optimizer, and the checks done for it
   are NOT counted against any budget (they are analysis, not part of the episode). To avoid
-  checking every point, only evaluations with score <= tol are candidates, for both objectives,
-  and each candidate is confirmed by the checker (a score is an average over targets, so it is
+  checking every point, only evaluations with score <= tol are candidates (naive and expert_v1;
+  for expert_v2, whose score is not on the tol scale, every point is), and each candidate is
+  confirmed by the checker (a score is an average over targets, so it is
   never taken as proof of success). A success whose score is > tol is therefore not credited
   (conservative; it cannot happen with the expert objective, whose unmatched targets cost >= 1).
 - succeeded by 25% / 50% / 100% of the budget: fraction of runs whose confirmed first success
@@ -88,7 +89,9 @@ def first_success_eval(cfg: ExperimentConfig, task: Task, events_path: Path) -> 
         i = (
             total - e["budget_after"]
         )  # evaluations spent once this one is done (agent checks count)
-        if e["output"]["value"] > tol:
+        # expert_v2 scores are not comparable with tol (a success can score above it), so there
+        # every evaluated point is a candidate; for the other objectives score <= tol selects.
+        if e["arguments"]["objective"] != "expert_v2" and e["output"]["value"] > tol:
             continue  # not a candidate; a candidate must still be confirmed by the checker
         if check(model, e["arguments"]["params"], task.targets, cfg.checker).success:
             return i

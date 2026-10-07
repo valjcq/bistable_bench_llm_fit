@@ -3,7 +3,9 @@
     naive_objective   what a user without bifurcation knowledge would write: simulate from a
                       low and a high start and compare where the simulations end up. Cheap,
                       but it can be fooled (see tests/test_scoring.py).
-    expert_objective  built on the fixed-point checker: knows about stability and stays
+    expert_v2_objective  candidate replacement of v1 (no checker call): asks of each target
+                      whether it is a stable fixed point. See NOTES.md for the definition.
+    expert_v1_objective  built on the fixed-point checker: knows about stability and stays
                       graded when the system is monostable. Meant to be minimized.
     evaluation_metric success flag + per-target errors from the checker. Used ONLY for final
                       reporting; it is flat (success or not) so it must never be optimized.
@@ -18,9 +20,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.optimize import brentq
 
 from bench.checker import CheckResult
-from bench.models.rate_network import RateNetwork
+from bench.models.rate_network import RateNetwork, fixed_point_residual, jacobian
 from bench.simulate import SimConfig, simulate_batch
 
 
@@ -56,7 +59,7 @@ def naive_objective(
     return float(np.abs(final_observed - targets).max(axis=1).mean())
 
 
-def expert_objective(
+def expert_v1_objective(
     result: CheckResult,
     targets: np.ndarray,
     penalty: float,
@@ -112,3 +115,69 @@ def evaluation_metric(result: CheckResult) -> EvaluationMetric:
         n_stable=result.n_stable,
         n_extra_stable=result.n_extra_stable,
     )
+
+
+def expert_v2_terms(
+    model: RateNetwork, params: Mapping[str, float], targets: np.ndarray, delta: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-target (residual_k, stab_k) of the expert_v2 objective (definition: NOTES.md).
+
+    Each target is completed to a full state r*: observed populations take the target values,
+    and the one unobserved population (if any) solves its own fixed-point equation
+    -x + F_i(W_ii x + sum_{j != i} W_ij r_j + I_i) = 0 given the others. The left side is >= 0 at
+    x = 0 and <= 0 at x = r_max (F lies in [0, r_max]), so a root is bracketed and `brentq`
+    finds it; for the E/I model's inhibitory population it is also unique (decreasing in x).
+
+    residual_k says how far r* is from being a fixed point (zero iff the target IS one);
+    stab_k says how unstable it is: max Re eig(J) times the slowest tau is a dimensionless decay
+    rate, `delta` demands a small margin of stability before the penalty reaches zero.
+    """
+    net = model.net(params)
+    obs = model.observed_idx
+    unobs = [i for i in range(model.n_pops) if i not in obs]
+    if len(unobs) > 1:
+        raise ValueError("expert_v2 supports at most one unobserved population")
+    tau_max = float(net.tau.max())
+    residuals, stabs = [], []
+    for target in targets:
+        r = np.zeros(model.n_pops)
+        r[obs] = target
+        if unobs:
+            i = unobs[0]
+
+            def g(x: float, i: int = i, r: np.ndarray = r) -> float:
+                r2 = r.copy()
+                r2[i] = x
+                return float(fixed_point_residual(r2, net)[i])
+
+            hi = float(net.r_max[i])
+            g_lo, g_hi = g(0.0), g(hi)
+            if g_lo <= 0.0:
+                r[i] = 0.0
+            elif g_hi >= 0.0:
+                r[i] = hi
+            else:
+                r[i] = brentq(g, 0.0, hi, xtol=1e-15, rtol=4 * np.finfo(float).eps)
+        residuals.append(float(np.abs(fixed_point_residual(r, net)[obs]).max()))
+        max_re = float(np.linalg.eigvals(jacobian(r, net)).real.max())
+        stabs.append(max(0.0, max_re * tau_max + delta))
+    return np.array(residuals), np.array(stabs)
+
+
+def expert_v2_objective(
+    model: RateNetwork,
+    params: Mapping[str, float],
+    targets: np.ndarray,
+    delta: float,
+    lam: float,
+) -> float:
+    """expert_v2: mean over targets of (residual_k + lam * stab_k); lower is better.
+
+    It asks of each target directly "is this state a stable fixed point of these parameters?"
+    instead of searching for fixed points and matching them, so it needs no checker call, has no
+    tolerance-dependent jump and no flat plateau where a state sits on only one target. It is
+    zero exactly when every target is a fixed point that is stable with margin `delta`.
+    Success is NOT decided here: only the checker decides.
+    """
+    residuals, stabs = expert_v2_terms(model, params, targets, delta)
+    return float(np.mean(residuals + lam * stabs))

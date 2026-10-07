@@ -98,12 +98,18 @@ class ScoringConfig:
     # r_max ~ 1 so errors are O(1); the penalty must exceed tol * K for the expert objective
     # to rank "all matched" below "something unmatched".
     expert_penalty: float = 1.0
+    # expert_v2 (definition in NOTES.md): stability margin demanded of every target state, in
+    # units of the slowest tau, and the weight of the instability term against the residual.
+    v2_delta: float = 0.01
+    v2_lambda: float = 1.0
 
     def __post_init__(self) -> None:
         if not self.naive_ic_fractions or any(not 0 <= f <= 1 for f in self.naive_ic_fractions):
             raise ValueError("scoring.naive_ic_fractions must be non-empty, values in [0, 1]")
         if self.expert_penalty <= 0:
             raise ValueError("scoring.expert_penalty must be > 0")
+        if self.v2_delta < 0 or self.v2_lambda <= 0:
+            raise ValueError("scoring.v2_delta must be >= 0 and scoring.v2_lambda > 0")
 
 
 @dataclass(frozen=True)

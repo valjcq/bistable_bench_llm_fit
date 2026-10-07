@@ -137,7 +137,7 @@ def test_first_success_expert_and_naive(cfg_toy, tmp_path):
         return tmp_path / f"{objective}.jsonl"
 
     good, bad = task.planted_params, {"w": 1.0, "I": 0.0, "k": 1.0}  # monostable: fails
-    p = events("expert", [(bad, 0.7), (bad, 0.01), (good, 0.005)])
+    p = events("expert_v1", [(bad, 0.7), (bad, 0.01), (good, 0.005)])
     assert first_success_eval(cfg_toy, task, p) == 3  # expert too: the checker confirms
     p = events("naive", [(bad, 0.7), (bad, 0.01), (good, 0.015)])
     assert first_success_eval(cfg_toy, task, p) == 3  # naive: point 2 is checked and fails
@@ -161,8 +161,8 @@ def test_a_low_average_score_is_not_taken_as_success(cfg_toy, task_toy, tmp_path
     path = tmp_path / "e.jsonl"
     env = Environment(cfg_toy, targets, 0)
     with JsonlLogger(path, 0, "h") as lg:
-        args = {"params": task_toy.planted_params, "objective": "expert"}
-        assert env.evaluate(task_toy.planted_params, "expert") >= 0.5  # the real score is high
+        args = {"params": task_toy.planted_params, "objective": "expert_v1"}
+        assert env.evaluate(task_toy.planted_params, "expert_v1") >= 0.5  # the real score is high
         lg.log("b", "evaluate", args, {"value": 0.015}, 0)  # the hypothetical averaged score
     assert not env.final_report(task_toy.planted_params).success
     assert first_success_eval(cfg_toy, task, path) is None
@@ -209,3 +209,13 @@ def test_parallel_batch_matches_serial(small_cfg, tmp_path):
     parallel = run_batch(*args, tmp_path / "p", jobs=2)
     drop = lambda rows: [{k: v for k, v in r.items() if k != "wall_clock_s"} for r in rows]  # noqa: E731
     assert drop(serial) == drop(parallel)
+
+
+def test_condition_c2_uses_expert_v2_and_confirms_every_point(small_cfg, toy_task, tmp_path):
+    res = _run(small_cfg, toy_task, "C2", 0, tmp_path, "cma")
+    d = tmp_path / res["run_name"]
+    assert res["objective"] == "expert_v2" and "C2-cma" in res["run_name"]
+    ev = [e for e in read_events(d / "events.jsonl") if e["name"] == "evaluate"]
+    assert {e["arguments"]["objective"] for e in ev} == {"expert_v2"} and len(ev) == 40
+    # expert_v2 scores are not on the tol scale: first success must not assume score <= tol
+    first_success_eval(small_cfg, toy_task, d / "events.jsonl")  # runs without error

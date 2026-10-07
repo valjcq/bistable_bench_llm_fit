@@ -26,7 +26,7 @@ def _toy_env(cfg, budget=200, seed=0):
     return Environment(cfg, np.array([[0.0], [1.0]]), seed)
 
 
-def _run(env, name, budget, seed=1, objective="expert", **kw):
+def _run(env, name, budget, seed=1, objective="expert_v1", **kw):
     return RunRegistry(env, episode_seed=seed).run(name, objective, budget, seed=seed, **kw)
 
 
@@ -71,7 +71,7 @@ def test_same_seed_gives_identical_history(cfg_toy, name):
 def test_init_point_is_evaluated_first(cfg_toy, name):
     env = _toy_env(cfg_toy, 40)
     init = {"w": 7.0, "I": 3.0, "k": 0.5}
-    expected = _toy_env(cfg_toy, 40).evaluate(init, "expert")
+    expected = _toy_env(cfg_toy, 40).evaluate(init, "expert_v1")
     r = _run(env, name, 40, init=init)
     assert r.history[0] == expected
 
@@ -79,7 +79,7 @@ def test_init_point_is_evaluated_first(cfg_toy, name):
 def test_cma_without_init_starts_at_the_cube_centre(cfg_toy):
     env = _toy_env(cfg_toy, 20)
     centre = env.space.from_unit([0.5] * env.space.dim)
-    first = _toy_env(cfg_toy, 20).evaluate(centre, "expert")
+    first = _toy_env(cfg_toy, 20).evaluate(centre, "expert_v1")
     assert _run(env, "cma", 20).history[0] == first
 
 
@@ -88,7 +88,7 @@ def test_run_stops_cleanly_when_the_global_budget_runs_out(cfg_toy):
     env = _toy_env(cfg_toy, 30)
 
     def f(x):
-        return env.evaluate(env.space.from_unit(x), "expert")
+        return env.evaluate(env.space.from_unit(x), "expert_v1")
 
     for _ in range(25):  # leave 5 evaluations
         f(np.full(env.space.dim, 0.5))
@@ -103,15 +103,15 @@ def test_run_budget_above_remaining_is_a_free_value_error(cfg_toy):
     env = _toy_env(cfg_toy, 30)
     reg = RunRegistry(env, 0)
     with pytest.raises(ValueError, match="remaining"):
-        reg.run("random", "expert", 31)
+        reg.run("random", "expert_v1", 31)
     assert env.n_evaluations == 0
     for bad in (
-        dict(optimizer="nope", objective="expert", run_budget=5),
+        dict(optimizer="nope", objective="expert_v1", run_budget=5),
         dict(optimizer="random", objective="success", run_budget=5),
-        dict(optimizer="random", objective="expert", run_budget=0),
-        dict(optimizer="random", objective="expert", run_budget=5, hyperparameters={"x": 1}),
-        dict(optimizer="cma", objective="expert", run_budget=5, hyperparameters={"sigma0": 9}),
-        dict(optimizer="random", objective="expert", run_budget=5, init={"w": 1.0}),
+        dict(optimizer="random", objective="expert_v1", run_budget=0),
+        dict(optimizer="random", objective="expert_v1", run_budget=5, hyperparameters={"x": 1}),
+        dict(optimizer="cma", objective="expert_v1", run_budget=5, hyperparameters={"sigma0": 9}),
+        dict(optimizer="random", objective="expert_v1", run_budget=5, init={"w": 1.0}),
     ):
         with pytest.raises(ValueError):
             reg.run(**bad)
@@ -187,7 +187,7 @@ def test_optimizers_never_import_the_environment_side():
 def test_optimizers_never_see_planted_params(cfg_toy, task_toy):
     """The environment is built from targets + seed only; the objective is the sole channel."""
     env = Environment.from_task(cfg_toy, task_toy)
-    r = RunRegistry(env, 0).run("random", "expert", 20)
+    r = RunRegistry(env, 0).run("random", "expert_v1", 20)
     planted = np.array(list(task_toy.planted_params.values()))
     assert not any(np.allclose(list(p.values()), planted) for p in [r.best_params])
     assert not hasattr(env, "planted_params") and not hasattr(env, "_task")

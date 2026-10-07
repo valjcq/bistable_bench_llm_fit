@@ -122,7 +122,7 @@ Fixed-step RK4, `dt = 0.1`. Fixed steps keep results bit-reproducible: no step-s
 | Score | What it is | Used by |
 |---|---|---|
 | `naive_objective` | simulate from a low and a high start (fractions [0.0, 1.0] of $r_{max}$, all populations), mean error of end states to targets, paired in sorted order. One evaluation. | optimizers (`evaluate(..., "naive")`) |
-| `expert_objective` | from the checker: matched target adds its real error; unmatched adds distance to the nearest fixed point of any kind + penalty 1.0; mean over targets. All matched ⇒ ≤ tol; each unmatched ⇒ ≥ 1.0/K. | optimizers (`"expert"`) |
+| `expert_v1_objective` | from the checker: matched target adds its real error; unmatched adds distance to the nearest fixed point of any kind + penalty 1.0; mean over targets. All matched ⇒ ≤ tol; each unmatched ⇒ ≥ 1.0/K. | optimizers (`"expert_v1"`) |
 | `evaluation_metric` | success, per-target errors, `n_stable`, `n_extra_stable` | final reporting only (`final_report`) |
 
 They must not be mixed: the metric is flat (success or not) and would give an optimizer nothing to follow; the naive objective is cheap but can be fooled; the expert objective is informed but costs a full check.
@@ -194,7 +194,7 @@ for fp in res.fixed_points:
 print("success:", res.success, "| n_stable:", res.n_stable)
 print("target errors:", res.target_errors)
 print("exhaustive search:", res.global_search_exhaustive)
-print("expert objective:", round(env.evaluate(params, "expert"), 3))
+print("expert objective:", round(env.evaluate(params, "expert_v1"), 3))
 print("evaluations used:", env.n_evaluations, "| remaining:", env.budget_remaining)
 ```
 

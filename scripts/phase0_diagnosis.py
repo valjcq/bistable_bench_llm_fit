@@ -121,6 +121,46 @@ for t, s, ev in picks:
     out.append(f"| task{t} seed{s} | " + " | ".join(f"{best[m - 1]:.3f}" for m in marks)
                + f" | {last} | {mono}/200 | {int((vals >= 0.5).sum())}/200 |")  # fmt: skip
 
+# ---- classification of failed C runs --------------------------------------------------------
+# Applied to the final best params, in this priority order (each run counted once, under the
+# first category that fits); the non-exclusive counts say how many runs satisfy each test.
+#   (a) monostable plateau: exactly one stable state and it matches one target
+#   (b) near miss: some stable state lies within 3 tol of an unmatched target
+#   (c) the fixed point nearest to an unmatched target (any kind) is unstable
+#   (d) other
+out.append("\n## Classification of failed C runs (final best params)\n")
+out.append("Priority order a > b > c > d; each failed run counted once (exclusive) and also "
+           "counted under every test it satisfies (non-exclusive, in brackets).\n")  # fmt: skip
+out.append("| condition | failed runs | (a) monostable plateau | (b) near miss (<= 3 tol) | "
+           "(c) nearest fixed point unstable | (d) other |\n|---|---|---|---|---|---|")  # fmt: skip
+TOL = CFG.task.tol
+for label in ("C-cma", "C-tpe"):
+    excl, incl, n = collections.Counter(), collections.Counter(), 0
+    for t, _s, ok, ev in runs(label):
+        if ok:
+            continue
+        n += 1
+        best = ev[int(np.argmin([e["output"]["value"] for e in ev]))]
+        res = verdict(t, best["arguments"]["params"])
+        targets = TASKS[t].targets
+        unmatched = [k for k, m in enumerate(res.target_matched) if not m]
+        fps = res.fixed_points
+        stable = [fp for fp in fps if fp.stable]
+        dist = lambda fp, k, tg=targets: float(np.abs(np.array(fp.observed) - tg[k]).max())  # noqa: E731
+        flags = {
+            "a": len(stable) == 1 and sum(res.target_matched) == 1,
+            "b": any(dist(fp, k) <= 3 * TOL for fp in stable for k in unmatched),
+            "c": any(
+                not min(fps, key=lambda fp, k=k: dist(fp, k)).stable for k in unmatched if fps
+            ),
+        }
+        for key, v in flags.items():
+            incl[key] += v
+        excl[next((k for k in "abc" if flags[k]), "d")] += 1
+    incl["d"] = excl["d"]
+    cells = " | ".join(f"{excl[k]} ({incl[k]})" for k in "abcd")
+    out.append(f"| {label} | {n} | {cells} |")
+
 # ---- 3. per-task descriptors ---------------------------------------------------------------
 out.append("\n## Per-task descriptors and success (of 5 seeds)\n")
 lo_w, hi_w = CFG.task.target_window

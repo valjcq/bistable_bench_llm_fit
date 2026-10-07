@@ -21,7 +21,8 @@ def _calls(env, params):
     n = env._model.n_pops  # test-only peek
     return {
         "evaluate-naive": lambda: env.evaluate(params, "naive"),
-        "evaluate-expert": lambda: env.evaluate(params, "expert"),
+        "evaluate-expert": lambda: env.evaluate(params, "expert_v1"),
+        "evaluate-expert_v2": lambda: env.evaluate(params, "expert_v2"),
         "check": lambda: env.check(params),
         "simulate": lambda: env.simulate(params, np.full(n, 0.5), 50.0),
     }
@@ -32,7 +33,7 @@ def test_every_budgeted_call_costs_exactly_one(cfg_toy, task_toy):
     for i, call in enumerate(_calls(env, task_toy.planted_params).values(), start=1):
         call()
         assert env.n_evaluations == i
-    assert env.budget_remaining == 50 - 4
+    assert env.budget_remaining == 50 - 5
     # naive simulates K trajectories but is still ONE evaluation (checked by the loop above).
 
 
@@ -42,9 +43,9 @@ def test_invalid_calls_and_final_report_are_free(cfg_toy, task_toy):
     with pytest.raises(ValueError):
         env.evaluate(good, "success")  # unknown objective: the final metric is not offered
     with pytest.raises(ValueError):
-        env.evaluate({**good, "w": 1e6}, "expert")  # out of bounds
+        env.evaluate({**good, "w": 1e6}, "expert_v1")  # out of bounds
     with pytest.raises(ValueError):
-        env.evaluate({"w": 1.0}, "expert")  # missing parameters
+        env.evaluate({"w": 1.0}, "expert_v1")  # missing parameters
     with pytest.raises(ValueError):
         env.simulate(good, np.zeros(5), 10.0)  # wrong x0 shape
     env.final_report(good)
@@ -57,7 +58,7 @@ def test_raises_at_the_limit_for_every_method_without_doing_work(cfg_ei, task_ei
     params = task_ei.planted_params
     calls = _calls(env, params)
     for _ in range(3):
-        env.evaluate(params, "expert")
+        env.evaluate(params, "expert_v1")
     assert env.budget_remaining == 0
     before = len(events)
     for name, call in calls.items():
@@ -65,8 +66,8 @@ def test_raises_at_the_limit_for_every_method_without_doing_work(cfg_ei, task_ei
             call()
         assert env.n_evaluations == 3, name  # nothing was charged or computed
     refused = events[before:]
-    assert [e["event"] for e in refused] == ["budget_exhausted"] * 4
-    assert [e["attempted"] for e in refused] == ["evaluate", "evaluate", "check", "simulate"]
+    assert [e["event"] for e in refused] == ["budget_exhausted"] * 5
+    assert [e["attempted"] for e in refused] == ["evaluate"] * 3 + ["check", "simulate"]
     env.final_report(params)  # reporting still works after the budget is gone
 
 
@@ -111,7 +112,7 @@ def test_event_hook_sees_every_call(cfg_toy, task_toy):
     events = []
     env = _env(cfg_toy, task_toy, hook=events.append)
     p = task_toy.planted_params
-    env.evaluate(p, "expert")
+    env.evaluate(p, "expert_v1")
     env.check(p)
     env.simulate(p, np.array([0.5]), 30.0)
     env.final_report(p)

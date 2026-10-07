@@ -28,6 +28,15 @@ C-tpe: median 1.027, min 0.513, max 1.141; targets matched at the best point (ch
 | task0 seed0 | 1.505 | 1.128 | 1.128 | 0.722 | 0.722 | 0.722 | 0.722 | 38 | 172/200 | 200/200 |
 | task3 seed0 | 1.481 | 1.118 | 0.809 | 0.809 | 0.809 | 0.809 | 0.809 | 25 | 57/200 | 200/200 |
 
+## Classification of failed C runs (final best params)
+
+Priority order a > b > c > d; each failed run counted once (exclusive) and also counted under every test it satisfies (non-exclusive, in brackets).
+
+| condition | failed runs | (a) monostable plateau | (b) near miss (<= 3 tol) | (c) nearest fixed point unstable | (d) other |
+|---|---|---|---|---|---|
+| C-cma | 14 | 5 (5) | 4 (4) | 5 (6) | 0 (0) |
+| C-tpe | 23 | 4 (4) | 7 (7) | 10 (15) | 2 (2) |
+
 ## Per-task descriptors and success (of 5 seeds)
 
 | task | low target | high target | low-edge dist | high-edge dist | separation | planted margin_eig | planted margin_dist | A | B-cma | B-tpe | C-cma | C-tpe | S |

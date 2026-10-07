@@ -29,7 +29,7 @@ def _run(name: str, seed: int):
         "check": env.check(task.planted_params).to_dict(),
         "check_random": env.check(params).to_dict(),
         "naive": env.evaluate(params, "naive"),
-        "expert": env.evaluate(params, "expert"),
+        "expert_v1": env.evaluate(params, "expert_v1"),
         "sim": env.simulate(params, np.full(n, 0.3), 200.0),
     }
 
@@ -41,7 +41,7 @@ def test_everything_is_reproducible(name):
     assert json.dumps(a["task"]) == json.dumps(b["task"])
     assert json.dumps(a["check"]) == json.dumps(b["check"])
     assert json.dumps(a["check_random"]) == json.dumps(b["check_random"])
-    assert a["naive"] == b["naive"] and a["expert"] == b["expert"]  # exact, not approx
+    assert a["naive"] == b["naive"] and a["expert_v1"] == b["expert_v1"]  # exact, not approx
     assert a["sim"] == b["sim"]
 
 
@@ -58,7 +58,7 @@ def test_evaluation_does_not_depend_on_call_order():
     env1, env2 = Environment.from_task(cfg, task), Environment.from_task(cfg, task)
     p = env1.space.from_unit(rng.random(env1.space.dim))
     q = env1.space.from_unit(rng.random(env1.space.dim))
-    first = env1.evaluate(p, "expert")
-    env2.evaluate(q, "expert")
+    first = env1.evaluate(p, "expert_v1")
+    env2.evaluate(q, "expert_v1")
     env2.evaluate(q, "naive")
-    assert env2.evaluate(p, "expert") == first
+    assert env2.evaluate(p, "expert_v1") == first

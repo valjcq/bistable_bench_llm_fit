@@ -235,3 +235,7 @@ only when the Wilson intervals do not overlap", no change after seeing test resu
 - Report: `docs/ei2pop_test.md` (condition table with Wilson intervals, success by 25/50/100% of the
   budget, wall-clock per run, per-task table). No change to code, settings or the report's
   definitions after seeing the results.
+
+## ei_2pop test: done
+Run as amended; report in `docs/ei2pop_test.md`, data in `results/ei_test/`. C-cma (expert_v2)
+44/45, B-cma 36/45, C-tpe 35/45, B-tpe 31/45, A 8/45. Nothing changed after seeing the results.

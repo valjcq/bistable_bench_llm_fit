@@ -17,9 +17,9 @@ class CMA(Optimizer):
     spec = OptimizerSpec(
         name="cma",
         description=(
-            "CMA-ES (Optuna): keeps a Gaussian cloud of candidates and adapts its centre, size "
-            "and shape toward better points. Strong local refinement on smooth landscapes; can "
-            "stall on flat regions. Starts from `init` if given, else from the box centre."
+            "CMA-ES (Optuna): samples each generation of candidates from a Gaussian distribution "
+            "whose mean, step size and covariance are updated from the best candidates of the "
+            "previous generation. Starts from `init` if given, else from the box centre."
         ),
         hyperparameters=(
             HyperSpec(

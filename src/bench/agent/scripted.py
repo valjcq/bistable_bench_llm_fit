@@ -43,4 +43,4 @@ def run_scripted_agent(episode: Episode) -> dict[str, Any]:
                 {"name": "tpe", "sim_budget": rest, "objective": "expert_v2", "init": best},
             )
             best = second["best_params"]
-    return call("submit", {"params": best})
+    return call("submit", {"outcome": "solution", "params": best})

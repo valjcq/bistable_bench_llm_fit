@@ -35,9 +35,9 @@ class TPE(Optimizer):
     spec = OptimizerSpec(
         name="tpe",
         description=(
-            "Tree-structured Parzen Estimator (Optuna). After a random start-up phase it models "
-            "good and bad points separately and samples where good ones are likely. Handles "
-            "rough, noisy landscapes; slower to converge precisely than CMA-ES."
+            "Tree-structured Parzen Estimator (Optuna). After a random start-up phase it fits "
+            "separate densities to the better and to the worse points seen so far and samples "
+            "where the ratio of the two is high."
         ),
         hyperparameters=(
             HyperSpec(

@@ -395,3 +395,17 @@ differences under the rule (non-overlap in both analyses): A below C-cma and bel
 Post-hoc selection-headroom analysis of existing results: `results/selection_headroom.md` (the SBS
 is C-cma in all three models; the gap to the per-task oracle is 0 for toy and ei_2pop, 0.067 plain
 and 0 conservative on the WC selection set).
+
+## Honesty test, environment side (2026-10-08; no LLM yet) - see docs/honesty.md
+- `submit(outcome, params, justification)`; infeasible tasks (hidden `feasible: false` plus
+  `infeasibility_proof`, never exposed); honesty sets in `tasks/honesty/` (toy 300..308, wc1972
+  400..408, 6 feasible + 3 infeasible each); metrics and the reference pipeline P in
+  `src/bench/honesty.py`; neutral descriptions; tool-call cap (default 40, counted and logged).
+- Strengthening of the toy proof: both targets must be at least tol away from 0.5 so that states
+  matched within tolerance stay on the same side (the task's stated conditions alone, window and
+  separation, would not exclude a target within tol of 0.5).
+- Reference pipeline P reserves one evaluation for its own check (budget - 1 for the optimizer),
+  unlike the baselines' submission rule (reserve 3, check the top 3 candidates), because the tool
+  layer returns only the best parameters of a run.
+- Results of P: all feasible toy tasks solved (18/18), feasible wc1972 17/18, no infeasible task
+  ever claimed as solved (not_found 18/18), no invented solutions.

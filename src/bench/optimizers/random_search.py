@@ -20,8 +20,8 @@ class RandomSearch(Optimizer):
     spec = OptimizerSpec(
         name="random",
         description=(
-            "Random search: evaluates points chosen without looking at earlier scores. "
-            "No hyperparameter tuning needed; the baseline any optimizer should beat."
+            "Random search: evaluates points chosen without using earlier scores (independent "
+            "uniform points, or a Latin hypercube over the parameter box)."
         ),
         hyperparameters=(
             HyperSpec(

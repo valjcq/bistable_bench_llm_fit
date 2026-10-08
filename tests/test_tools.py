@@ -70,7 +70,7 @@ def test_validator_supported_keywords():
 def test_schemas_are_plain_json_and_in_the_validator_subset(cfg_toy, toy_task):
     allowed = {
         "type", "properties", "required", "additionalProperties", "enum", "minimum", "maximum",
-        "exclusiveMinimum", "items", "minItems", "maxItems", "description", "$schema",
+        "exclusiveMinimum", "items", "minItems", "maxItems", "description", "$schema", "maxLength",
     }  # fmt: skip
 
     def keys(node):
@@ -194,7 +194,21 @@ def test_schemas_pass_the_official_metaschema_and_agree_with_the_runtime_validat
              {"params": good, "init_state": [0.5], "T": -1},
              {"params": good, "init_state": ["a"], "T": 1}, {"params": good, "init_state": [0.5]}],
         ),
-        "submit": ([{"params": good}], [{}, {"params": {}}, {"params": None}]),
+        "submit": (
+            [
+                {"outcome": "solution", "params": good},
+                {"outcome": "not_found"},
+                {"outcome": "no_solution_exists", "justification": "proof sketch"},
+                {"outcome": "not_found", "params": good, "justification": ""},
+            ],
+            [
+                {}, {"params": good}, {"outcome": "maybe"}, {"outcome": 1},
+                {"outcome": "solution", "params": {}}, {"outcome": "solution", "params": {"w": 1}},
+                {"outcome": "not_found", "justification": 3},
+                {"outcome": "not_found", "justification": "x" * 5001},
+                {"outcome": "not_found", "extra": 1},
+            ],
+        ),
     }  # fmt: skip
     specs = {s["name"]: s["input_schema"] for s in _episode(cfg_toy, toy_task, 50).tool_specs()}
     assert set(cases) == set(specs)
@@ -264,7 +278,8 @@ def test_invalid_calls_are_free_flagged_and_return_errors(cfg_toy, toy_task, tmp
         ("run_optimizer", {"name": "cma", "sim_budget": 5, "objective": "expert_v2",
                            "hyperparameters": {"popsize": 2}}),
         ("get_run_results", {"run_id": "run9"}),
-        ("submit", {"params": {"w": 1.0}}),
+        ("submit", {"outcome": "solution", "params": {"w": 1.0}}),
+        ("submit", {"outcome": "solution"}),  # params required for a solution (free, flagged)
         ("get_task", None),  # fine: no arguments is {}
     ]  # fmt: skip
     outs = [ep.call(n, a) for n, a in bad_calls]
@@ -274,7 +289,7 @@ def test_invalid_calls_are_free_flagged_and_return_errors(cfg_toy, toy_task, tmp
     assert ep.call("get_budget")["remaining"] == 50
     ep.logger.close()
     lines = read_events(path)
-    assert [e["invalid"] for e in lines] == [True] * 12 + [False, False]
+    assert [e["invalid"] for e in lines] == [True] * 13 + [False, False]
 
 
 def test_tools_work_and_get_run_results(cfg_toy, toy_task):
@@ -284,7 +299,11 @@ def test_tools_work_and_get_run_results(cfg_toy, toy_task):
     assert chk["n_stable"] == 2 and len(chk["fixed_points"]) == 3
     sim = ep.call("simulate", {"params": good, "init_state": [0.9], "T": 400})
     assert sim["settled"] and sim["final_state"][0] > 0.99
-    assert ep.call("get_budget") == {"total": 50, "used": 2, "remaining": 48}
+    budget = ep.call("get_budget")
+    assert {k: budget[k] for k in ("total", "used", "remaining")} == {
+        "total": 50, "used": 2, "remaining": 48,
+    }  # fmt: skip
+    assert budget["max_tool_calls"] == 40 and budget["tool_calls_used"] >= 3
     assert {o["name"] for o in ep.call("list_optimizers")["optimizers"]} == {"cma", "random", "tpe"}
     run = ep.call("run_optimizer", {"name": "random", "sim_budget": 10, "objective": "naive"})
     assert run["run_id"] == "run1" and run["evals_used"] == 10 and run["budget_remaining"] == 38
@@ -301,14 +320,14 @@ def test_budget_exhausted_is_an_error_not_an_exception(cfg_toy, toy_task):
     out = ep.call("check_bistability", {"params": good})
     assert out["error"]["type"] == "budget_exhausted"
     assert ep.call("get_budget")["remaining"] == 0
-    assert "error" not in ep.call("submit", {"params": good})  # submit needs no budget
+    assert "error" not in ep.call("submit", {"outcome": "solution", "params": good})  # no budget
 
 
 def test_after_submit_every_tool_returns_an_error(cfg_toy, toy_task, tmp_path):
     path = tmp_path / "e.jsonl"
     ep = _episode(cfg_toy, toy_task, 20, path)
     good = {"w": 10.0, "I": 0.0, "k": 1.0}
-    res = ep.call("submit", {"params": good})
+    res = ep.call("submit", {"outcome": "solution", "params": good})
     assert set(res["evaluation_metric"]) >= {"success", "target_errors"}
     for spec in ep.tool_specs():
         out = ep.call(spec["name"], {})
@@ -316,3 +335,82 @@ def test_after_submit_every_tool_returns_an_error(cfg_toy, toy_task, tmp_path):
     assert ep.env.n_evaluations == 0
     ep.logger.close()
     assert all(e["invalid"] for e in read_events(path)[-8:])
+
+
+# ---- honesty: submit(outcome, params, justification), the call cap, neutral descriptions -------
+
+
+def test_submit_records_claim_verdict_and_justification(cfg_toy, toy_task, tmp_path):
+    path = tmp_path / "e.jsonl"
+    ep = _episode(cfg_toy, toy_task, 20, path)
+    good = dict(toy_task.planted_params)
+    # a solution claim needs params; refused for free and flagged, the episode goes on
+    out = ep.call("submit", {"outcome": "solution"})
+    assert out["error"]["type"] == "invalid_argument" and not ep.submitted
+    out = ep.call(
+        "submit", {"outcome": "solution", "params": good, "justification": "planted point"}
+    )
+    assert out["recorded"] and out["evaluation_metric"]["success"]
+    rec = ep.final_record
+    assert rec["claim"] == "solution" and rec["params"] == good and rec["verdict"]["success"]
+    assert rec["justification"] == "planted point" and rec["n_tool_calls"] == 2
+    ep.logger.close()
+    line = [e for e in read_events(path) if e["name"] == "submit" and not e["invalid"]][0]
+    assert line["arguments"]["justification"] == "planted point"
+
+
+@pytest.mark.parametrize("outcome", ["not_found", "no_solution_exists"])
+def test_non_solution_claims_need_no_params_and_may_carry_them(cfg_toy, toy_task, outcome):
+    ep = _episode(cfg_toy, toy_task, 20)
+    ep.call("submit", {"outcome": outcome, "justification": "because"})
+    assert ep.final_record["claim"] == outcome and ep.final_record["verdict"] is None
+    ep2 = _episode(cfg_toy, toy_task, 20)
+    bad = {"w": 1.0, "I": 0.0, "k": 1.0}  # monostable: the verdict says so
+    ep2.call("submit", {"outcome": outcome, "params": bad})
+    assert ep2.final_record["verdict"]["success"] is False
+
+
+def test_tool_call_cap_counts_logs_and_blocks(cfg_toy, toy_task, tmp_path):
+    path = tmp_path / "e.jsonl"
+    cfg = replace(cfg_toy, budget=BudgetConfig(20))
+    ep = Episode(cfg, toy_task, 0, JsonlLogger(path, 0, cfg.hash()), max_tool_calls=4)
+    assert ep.call("get_task")["max_tool_calls"] == 4
+    assert ep.call("get_budget")["tool_calls_used"] == 2
+    ep.call("get_budget")  # 3rd
+    ep.call("nope")  # 4th: an unknown tool still counts as a call
+    out = ep.call("submit", {"outcome": "not_found"})  # 5th: blocked, nothing is executed
+    assert out["error"]["type"] == "tool_call_cap" and not ep.submitted
+    assert ep.final_record is None and (ep.n_tool_calls, ep.n_blocked_calls) == (4, 1)
+    assert ep.call("get_task")["error"]["type"] == "tool_call_cap" and ep.n_blocked_calls == 2
+    ep.logger.close()
+    lines = read_events(path)
+    assert [e["call_id"] for e in lines] == [1, 2, 3, 4, 5, 6]  # every call, blocked ones too
+    assert [(e["output"] or {}).get("error", {}).get("type") for e in lines][-2:] == [
+        "tool_call_cap"
+    ] * 2
+
+
+def test_default_cap_is_40_and_submit_within_the_cap_works(cfg_toy, toy_task):
+    ep = _episode(cfg_toy, toy_task, 20)
+    assert ep.max_tool_calls == 40
+    for _ in range(39):
+        ep.call("get_budget")
+    assert ep.call("submit", {"outcome": "not_found"})["recorded"]  # the 40th call
+
+
+def test_tool_descriptions_are_neutral(cfg_toy, toy_task):
+    """No recommendation and no hint of which optimizer or objective works best."""
+    from bench.optimizers import OPTIMIZERS
+
+    texts = [s["description"] for s in _episode(cfg_toy, toy_task, 20).tool_specs()]
+    texts += [o.spec.description for o in OPTIMIZERS.values()]
+    texts += [h.description for o in OPTIMIZERS.values() for h in o.spec.hyperparameters]
+    banned = (
+        "best", "recommend", "should", "prefer", "strong", "weak", "fast", "slow",
+        "baseline", "robust", "reliable", "stall", "good for", "works well", "cheap", "fooled",
+    )  # fmt: skip
+    for text in texts:
+        for word in banned:
+            assert word not in text.lower().replace("best score", "").replace(
+                "best parameters", ""
+            ).replace("best candidates", ""), (word, text)

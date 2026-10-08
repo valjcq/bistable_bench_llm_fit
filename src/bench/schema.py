@@ -2,8 +2,8 @@
 
 Supports exactly the keywords our tool schemas use: type (a name or a list of names),
 properties, required, additionalProperties (false only), enum, minimum, maximum,
-exclusiveMinimum, items, minItems, maxItems. Anything else in a schema is ignored, so keep the
-schemas inside this subset (tests check the shipped ones). The schemas themselves are plain
+exclusiveMinimum, maxLength, items, minItems, maxItems. Anything else in a schema is ignored, so
+keep the schemas inside this subset (tests check the shipped ones). The schemas themselves are plain
 JSON Schema, so an LLM backend or the full `jsonschema` package can consume them unchanged.
 """
 
@@ -34,6 +34,8 @@ def validate(value: Any, schema: dict[str, Any], path: str = "$") -> list[str]:
         if not any(_TYPES[n](value) for n in names):
             return [f"{path}: expected {' or '.join(names)}, got {type(value).__name__}"]
     problems: list[str] = []
+    if isinstance(value, str) and "maxLength" in schema and len(value) > schema["maxLength"]:
+        problems.append(f"{path}: longer than {schema['maxLength']} characters")
     if "enum" in schema and value not in schema["enum"]:
         problems.append(f"{path}: must be one of {schema['enum']}, got {value!r}")
     if _TYPES["number"](value):

@@ -43,9 +43,16 @@ class Task:
     # External inputs of the task (e.g. the Wilson-Cowan P), drawn at planting and given to the
     # agent. Empty for models without task inputs; then absent from the file.
     inputs: dict[str, float] = field(default_factory=dict)
+    # HIDDEN, like planted_params: never exposed by get_task or any tool. A task is feasible unless
+    # the file says otherwise; an infeasible task (bench.infeasible) carries the proof that no
+    # parameters in the bounds can realize its targets, and has no planted parameters.
+    feasible: bool = True
+    infeasibility_proof: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         extra = {"inputs": self.inputs} if self.inputs else {}
+        if not self.feasible:  # only written for infeasible tasks: old files stay identical
+            extra |= {"feasible": False, "infeasibility_proof": self.infeasibility_proof}
         return {
             "format_version": 1,
             "model": self.model_name,
@@ -73,6 +80,8 @@ class Task:
             n_attempts=int(d["n_attempts"]),
             rejections=dict(d["rejections"]),
             inputs={k: float(v) for k, v in d.get("inputs", {}).items()},
+            feasible=bool(d.get("feasible", True)),
+            infeasibility_proof=str(d.get("infeasibility_proof", "")),
         )
 
 

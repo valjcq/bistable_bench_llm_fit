@@ -302,3 +302,34 @@ included in the main results.
   `tasks/wc1972_K2_seed1..9` (47, 105, 11, 53, 74, 30, 4, 12, 8 attempts). The low targets are
   all within [-0.04, 0.02], i.e. the background state, as predicted. NOT used yet: no WC budget,
   no WC benchmark run.
+
+## wc1972 test protocol (written and committed BEFORE any Wilson-Cowan run)
+Config: `configs/exp_wc1972.yaml` (asymmetric window, tol 0.01, task input P in the task file),
+the Baseline settings, `scoring.v2_*` as they are, the submission rule (reserve 3, check the top 3
+distinct candidates) for every condition; the budget is set per run with `--budget`. No setting of
+objectives or optimizers changes between the budget selection and the test.
+
+**Sets.** Selection set: `tasks/selection/wc1972_K2_seed100..104`. Test set:
+`tasks/wc1972_K2_seed1..9`. No other WC tasks are used.
+
+**Budget selection.** Run A, B-cma and C-cma (C = optimizer + `expert_v2`) at total budgets 500,
+1000 and 2000 on the selection set, 3 seeds each (0, 1, 2): 15 runs per cell. "Success" = the
+submitted parameters pass the final check. The best baseline at a budget is the condition with the
+highest success rate among A, B-cma, C-cma.
+Budget rule (mechanical): among the budgets where the best baseline's success rate is in
+[0.30, 0.80], pick the one whose rate is closest to 0.60; ties go to the smaller budget. If no
+budget has a best-baseline rate in [0.30, 0.80], STOP and report; nothing else is run.
+Rationale: the later agent comparison needs a task that is solvable (a baseline succeeds often
+enough to show what is possible) and has headroom (not saturated, so differences can appear). The
+ei_2pop rule was based on random search's success rate, which turned out to be unmeasurable at
+this scale (it did not select a budget); this rule looks at the best baseline instead.
+
+**Test.** Conditions A, B-cma, B-tpe, C-cma, C-tpe, at the chosen budget, 5 seeds (0-4) per test
+task: 45 runs per condition.
+
+**Pre-registered analysis.** Success rate with Wilson 95% intervals; success by 25/50/100% of the
+budget (checker-confirmed first success); wall-clock per run; a per-task table; tasks solved
+(>= 3 of 5 seeds) out of 9 per condition; and 95% intervals from a bootstrap over tasks (resample
+the 9 tasks with replacement, each task's seeds kept together; as in `scripts/ei2pop_bootstrap.py`).
+A difference between conditions is claimed only when the intervals do not overlap in BOTH the
+run-level (Wilson) and the task-level (bootstrap) analyses. No change after seeing test results.

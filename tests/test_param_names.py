@@ -98,3 +98,14 @@ def test_internal_names_stay_in_task_files_and_the_analysis_side_of_the_log(cfg,
     # the environment's own event lines (never shown to the agent) keep the internal names
     env_lines = [e for e in read_events(path) if e["call_id"] is None and e["name"] == "check"]
     assert env_lines and set(env_lines[0]["arguments"]["params"]) == set(MAP)
+
+
+def test_the_task_input_is_called_i_e_at_the_tool_layer_only(cfg, task, tmp_path):
+    from bench.models.instances import public_input_names
+
+    assert public_input_names("wc1972") == {"P": "I_E"} and public_input_names("toy_1pop") == {}
+    assert task.inputs.keys() == {"P"}  # the task file keeps P
+    ep = Episode(cfg, task, 0)
+    shown = ep.call("get_task")["inputs"]
+    assert list(shown) == ["I_E"] and shown["I_E"] == task.inputs["P"]
+    assert ep.env.describe()["inputs"] == {"P": task.inputs["P"]}  # the environment keeps P

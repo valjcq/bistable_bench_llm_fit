@@ -129,6 +129,19 @@ PUBLIC_PARAM_NAMES = {
 }  # fmt: skip
 
 
+# Same idea for the external INPUTS of a task (get_task's `inputs`): the Wilson-Cowan input P (Q is
+# always 0 and never shown) is called I_E, like model_B's input to E; P/Q is the paper's notation.
+PUBLIC_INPUT_NAMES = {"wc1972": {"P": "I_E"}}
+
+
+def public_input_names(model_name: str) -> dict[str, str]:
+    """Internal -> agent-facing names of a model's task inputs ({} if shown unchanged)."""
+    for prefix, names in PUBLIC_INPUT_NAMES.items():
+        if model_name.startswith(prefix):
+            return dict(names)
+    return {}
+
+
 def public_param_names(model_name: str) -> dict[str, str]:
     """Internal -> agent-facing parameter names of a model ({} if they are shown unchanged)."""
     for prefix, names in PUBLIC_PARAM_NAMES.items():

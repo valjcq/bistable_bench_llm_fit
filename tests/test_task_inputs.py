@@ -112,7 +112,7 @@ def test_a_wc_task_can_be_planted_with_its_input_and_is_told_to_the_agent(cfg_wc
     env = Environment.from_task(cfg, task)
     assert env.check(task.planted_params).success  # solvable at the planted input
     info = Episode(cfg, task, seed=0).call("get_task")
-    assert info["inputs"] == {"P": P} and info["tol"] == pytest.approx(0.01)
+    assert info["inputs"] == {"I_E": P} and info["tol"] == pytest.approx(0.01)
     assert "planted" not in json.dumps(info)
 
 

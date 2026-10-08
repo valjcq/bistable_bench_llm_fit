@@ -311,6 +311,8 @@ class Episode:
         d["max_tool_calls"] = self.max_tool_calls
         for p in d["free_parameters"]:
             p["name"] = self._pub(p["name"])
+        if "inputs" in d:  # the task's external inputs, under their agent-facing names
+            d["inputs"] = {self.env.input_names.get(k, k): v for k, v in d["inputs"].items()}
         return d
 
     def _tool_list_optimizers(self) -> dict[str, Any]:

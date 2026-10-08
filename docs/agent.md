@@ -15,7 +15,8 @@ The free parameters of model_C are shown under agent-facing names, a mapping app
 tool layer** (`bench.models.instances.PUBLIC_PARAM_NAMES`): c1 -> w_EE, c2 -> w_EI, c3 -> w_IE,
 c4 -> w_II, a_e -> gain_E, theta_e -> thresh_E, a_i -> gain_I, theta_i -> thresh_I. `get_task`, the
 tool schemas, run results (`best_params`), `check_bistability`/`simulate`/`submit`/`init` parameters
-and error messages use the public names; task files, configs, the environment and the analysis side
+and error messages use the public names, and the task's external input P is shown as `I_E`
+(`inputs` in `get_task`; Q is always 0 and never shown); task files, configs, the environment and the analysis side
 of the logs keep the internal ones. The leak test also forbids the internal names in anything the
 agent sees.
 A turn without a tool call is answered with: "No tool call was made. Use a tool to continue, or call

@@ -39,7 +39,7 @@ CASES = [
 ]
 
 
-def everything_an_agent_sees(config: str, task_file: str) -> tuple[dict, str]:
+def everything_an_agent_sees(config: str, task_file: str) -> tuple[dict, str, str]:
     cfg = replace(load_config(ROOT / "configs" / config), budget=BudgetConfig(12))
     ep = Episode(cfg, load_task(HONESTY / task_file), 0, max_tool_calls=30)
     task = ep.call("get_task")
@@ -88,25 +88,28 @@ def everything_an_agent_sees(config: str, task_file: str) -> tuple[dict, str]:
         ep.tool_specs(),
         [o.spec.to_dict() for o in OPTIMIZERS.values()],
     ]  # fmt: skip
-    return task, json.dumps(texts).lower()
+    raw = json.dumps(texts)
+    return task, raw.lower(), raw
 
 
 @pytest.mark.parametrize(("config", "task_file"), CASES)
 def test_get_task_has_exactly_the_expected_keys(config, task_file):
-    task, _ = everything_an_agent_sees(config, task_file)
+    task, _, _ = everything_an_agent_sees(config, task_file)
     expected = GET_TASK_KEYS | ({"inputs"} if "wc1972" in task_file else set())
     assert set(task) == expected
 
 
 @pytest.mark.parametrize(("config", "task_file"), CASES)
 def test_nothing_an_agent_sees_contains_a_forbidden_word(config, task_file):
-    _, text = everything_an_agent_sees(config, task_file)
+    _, text, raw = everything_an_agent_sees(config, task_file)
     for word in FORBIDDEN:
         assert word not in text, word
     # the year, as a whole token (not inside a number such as 0.31972)
     assert not re.search(r"(?<![0-9.])1972(?![0-9])", text)
     # the model's own parameter notation (Wilson-Cowan: c1..c4, a_e, theta_e, a_i, theta_i)
     assert not re.search(r"\b(c[1-4]|a_e|theta_e|a_i|theta_i)\b", text)
+    # and its input notation: no key or string "P" or "Q" (checked on the un-lowercased dump)
+    assert not re.search(r'"[PQ]"', raw), "a standalone P or Q appears in an agent-visible output"
 
 
 @pytest.mark.parametrize(
@@ -117,7 +120,7 @@ def test_nothing_an_agent_sees_contains_a_forbidden_word(config, task_file):
     ],
 )
 def test_get_task_shows_a_neutral_model_label(config, task_file, label):
-    task, _ = everything_an_agent_sees(config, task_file)
+    task, _, _ = everything_an_agent_sees(config, task_file)
     assert task["model"] == label
 
 
@@ -133,5 +136,11 @@ def test_every_internal_model_has_a_public_label():
 
 def test_the_leak_check_would_catch_a_leak():
     """Sanity: the collector does see error messages and get_task, so a leak would show up."""
-    _, text = everything_an_agent_sees("exp_toy_1pop.yaml", "toy_1pop_K2_seed300.json")
+    _, text, _ = everything_an_agent_sees("exp_toy_1pop.yaml", "toy_1pop_K2_seed300.json")
     assert "unknown tool" in text and "must be <=" in text and "max_tool_calls" in text
+
+
+def test_model_c_shows_its_task_input_as_i_e_not_p():
+    task, _, raw = everything_an_agent_sees("exp_wc1972.yaml", "wc1972_K2_seed401.json")
+    assert list(task["inputs"]) == ["I_E"]  # the paper's P, under model_B's name for it
+    assert '"P"' not in raw and '"Q"' not in raw

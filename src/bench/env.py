@@ -21,7 +21,7 @@ from bench.budget import Budget, BudgetExhausted
 from bench.checker import CheckResult, check
 from bench.config import ExperimentConfig
 from bench.models.base import ParamSpace
-from bench.models.instances import public_label, public_param_names
+from bench.models.instances import public_input_names, public_label, public_param_names
 from bench.scoring import EvaluationMetric
 from bench.simulate import SimResult, simulate_batch, t_max
 from bench.tasks import Task
@@ -109,6 +109,11 @@ class Environment:
     def param_names(self) -> dict[str, str]:
         """Internal -> agent-facing names of the free parameters ({} when they are unchanged)."""
         return public_param_names(self._model.name)
+
+    @property
+    def input_names(self) -> dict[str, str]:
+        """Internal -> agent-facing names of the task inputs ({} when they are unchanged)."""
+        return public_input_names(self._model.name)
 
     @property
     def rng(self) -> np.random.Generator:

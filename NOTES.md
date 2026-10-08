@@ -374,3 +374,15 @@ Successes of the submitted parameters (15 runs per cell, selection set, seeds 0-
 
 Rule (best baseline in [0.30, 0.80], closest to 0.60): the candidates are 200 and 300; **200 is
 selected** (C-cma at exactly 0.60). No test run was made. Data: `results/wc_selection/`.
+
+## EXPLORATORY: hysteresis tasks for Wilson-Cowan (feasibility only, nothing adopted)
+`scripts/wc_hysteresis_feasibility.py`, `results/wc_hysteresis_feasibility.md`. 2000 random draws in
+the wc1972 box (Q = 0), P swept over [-0.5, 1.0] in steps of 0.01, planting-level checker (16 starts
++ corners). 55.7% of draws (1114) have at least one P interval with >= 2 stable states (1416
+intervals; 99 draws have two or more). Widths are mostly large: median 1.26, 75th percentile 1.5
+(= the whole sweep, i.e. truncated by the sweep range); see the file for the percentiles. Only 34 draws (1.7%) have an interval inside [-0.3, 0.6] with width in [0.1, 0.5]; at
+the interval midpoint the active state (highest stable E) is in [0.05, 0.45] for 13 of those 37
+intervals (35%), so about 13 / 2000 = 0.65% of draws (roughly 150 draws per task) would give a
+usable hysteresis task. Over all intervals the active state is in the window only 9.6% of the
+time. Caveat: the 256-start search found bistability that the 16-start one missed in 12 of 1600
+sampled (draw, P) cases.

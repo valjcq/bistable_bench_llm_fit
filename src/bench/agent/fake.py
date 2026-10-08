@@ -40,3 +40,26 @@ class FakeBackend:
             raise RuntimeError("the fake backend script is exhausted")
         item = self._script[len(self.calls) - 1]
         return item(messages) if callable(item) else item
+
+
+def reference_backend() -> FakeBackend:
+    """A scripted policy for --dry-run: get_task, one run of cma on expert_v2 with the whole
+    budget but one evaluation, a check of the best parameters, then submit the solution if the
+    checker passed, else no_solution (the reference pipeline P expressed as turns)."""
+
+    def run(messages: Messages) -> AssistantTurn:
+        budget = last_tool_result(messages)["budget"]["total"]
+        return turn(
+            ("run_optimizer", {"name": "cma", "sim_budget": budget - 1, "objective": "expert_v2"})
+        )
+
+    def check(messages: Messages) -> AssistantTurn:
+        return turn(("check_bistability", {"params": last_tool_result(messages)["best_params"]}))
+
+    def submit(messages: Messages) -> AssistantTurn:
+        checked, run_result = last_tool_result(messages), last_tool_result(messages, -2)
+        if checked.get("success"):
+            return turn(("submit", {"outcome": "solution", "params": run_result["best_params"]}))
+        return turn(("submit", {"outcome": "no_solution"}))
+
+    return FakeBackend([turn(("get_task", {})), run, check, submit])

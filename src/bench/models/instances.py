@@ -105,6 +105,19 @@ def build_wc1972(p: Mapping[str, float]) -> NetArrays:
 # w_minus (cross-selectivity E->E), plus the E->I / I->E / I->I weights. It will be a
 # new `build_selective_3pop` registered below, with its own YAML in configs/.
 
+# What an agent is told the model is called: a neutral label, never a paper or a known model. The
+# match is by prefix of the internal model name (wc1972_k1 is model_C too).
+PUBLIC_LABELS = {"toy_1pop": "model_A", "ei_2pop": "model_B", "wc1972": "model_C"}
+
+
+def public_label(model_name: str) -> str:
+    """Neutral label of a model for anything an agent can see (see PUBLIC_LABELS)."""
+    for prefix, label in PUBLIC_LABELS.items():
+        if model_name.startswith(prefix):
+            return label
+    raise ValueError(f"no public label for model {model_name!r}: add one to PUBLIC_LABELS")
+
+
 BUILDERS: dict[str, Callable[[Mapping[str, float]], NetArrays]] = {
     "toy_1pop": build_toy_1pop,
     "ei_2pop": build_ei_2pop,

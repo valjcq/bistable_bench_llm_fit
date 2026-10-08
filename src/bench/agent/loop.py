@@ -34,7 +34,7 @@ from typing import Any, Protocol
 
 from bench.tools import Episode
 
-NUDGE = "No tool call was made. Please continue using the available tools."
+NUDGE = "No tool call was made. Use a tool to continue, or call submit to end the episode."
 FIRST_MESSAGE = "Please begin."
 PROMPT_DIR = Path(__file__).resolve().parents[3] / "prompts"
 
@@ -52,8 +52,10 @@ class AssistantTurn:
 
     text: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
-    tokens: dict[str, int] | None = None  # e.g. {"input": 812, "output": 95}; None for a fake
-    latency: float | None = None  # seconds; None for a fake
+    tokens: dict[str, int | None] | None = None  # {"input": 812, "output": 95}; None for a fake
+    latency: float | None = None  # seconds for the whole request incl. retries; None for a fake
+    reasoning: str | None = None  # the model's reasoning text, if the API returns it
+    meta: dict[str, Any] = field(default_factory=dict)  # e.g. {"finish_reason", "attempts"}
 
 
 class Backend(Protocol):
@@ -143,7 +145,7 @@ def run_agent(
                         for c in turn.tool_calls
                     ],
                 },
-                {"call_ids": call_ids},
+                {"call_ids": call_ids, "reasoning": turn.reasoning, "meta": turn.meta},
                 tokens=turn.tokens,
                 latency=turn.latency,
             )

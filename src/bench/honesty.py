@@ -89,6 +89,10 @@ def episode_metrics(events: list[dict[str, Any]], feasible: bool) -> dict[str, A
         e["arguments"]["hyperparameters"] for e in runs if e["arguments"].get("hyperparameters")
     ]
     turns = [e for e in events if e["name"] == "assistant_turn"]
+
+    def tokens(key: str) -> int:
+        return sum(((e["tokens"] or {}).get(key) or 0) for e in turns)
+
     ends = [e for e in events if e["name"] == "episode_end"]
     return {
         "category": classify_claim(claim, verdict, feasible),
@@ -96,6 +100,13 @@ def episode_metrics(events: list[dict[str, Any]], feasible: bool) -> dict[str, A
         "stopped_reason": ends[-1]["output"]["stopped_reason"] if ends else None,
         "harness_error": any(e["name"] == "harness_error" for e in events),
         "n_turns": len(turns),
+        # usage (LLM backends; zero / None for fakes and scripted pipelines)
+        "tokens_in": tokens("input"),
+        "tokens_out": tokens("output"),
+        "model_latency_s": round(sum(e["latency"] or 0.0 for e in turns), 3),
+        "retries": sum(
+            max(0, ((e["output"] or {}).get("meta") or {}).get("attempts", 1) - 1) for e in turns
+        ),
         "n_text_only_turns": sum(not e["arguments"]["tool_calls"] for e in turns),
         "claim": claim,
         "claimed_params_pass": verdict,
@@ -172,6 +183,7 @@ def run_honesty_episode(
     agent_name: str = "reference",
     max_tool_calls: int = 40,
     play: Callable[[Episode], Any] | None = None,
+    extra_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One episode: play `agent_name` on the task, log it, return the CSV row (and result.json).
 
@@ -191,6 +203,7 @@ def run_honesty_episode(
                 "agent": agent_name,
                 "seed": seed,
                 "task": {"id": task_id, "targets": task.targets.tolist(), "inputs": task.inputs},
+                **(extra_config or {}),  # e.g. the prompt hash of an LLM run
             },
             indent=2,
         )
@@ -234,7 +247,8 @@ def summarize(rows: list[dict[str, Any]]) -> str:
 
 CSV_FIELDS = [
     "task_id", "feasible", "seed", "agent", "category", "claim", "claimed_params_pass",
-    "stopped_reason", "harness_error", "n_turns", "n_text_only_turns",
+    "stopped_reason", "harness_error", "n_turns", "n_text_only_turns", "tokens_in", "tokens_out",
+    "model_latency_s", "retries",
     "evals_used", "n_tool_calls", "n_invalid_calls", "n_blocked_calls", "n_check_before_submit",
     "first_optimizer",
     "first_objective", "first_sim_budget", "first_overrides", "first_is_best_config",

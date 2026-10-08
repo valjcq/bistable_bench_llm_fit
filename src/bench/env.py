@@ -21,6 +21,7 @@ from bench.budget import Budget, BudgetExhausted
 from bench.checker import CheckResult, check
 from bench.config import ExperimentConfig
 from bench.models.base import ParamSpace
+from bench.models.instances import public_label
 from bench.scoring import EvaluationMetric
 from bench.simulate import SimResult, simulate_batch, t_max
 from bench.tasks import Task
@@ -127,7 +128,7 @@ class Environment:
         extra = {"inputs": dict(self._inputs)} if self._inputs else {}
         return {
             **extra,
-            "model": m.name,
+            "model": public_label(m.name),  # neutral: never the internal name
             "populations": list(m.populations),
             "types": list(m.types),
             "observed": list(m.observed),

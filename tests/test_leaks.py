@@ -8,6 +8,7 @@ keys, and no collected text may contain a forbidden word.
 """
 
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -27,6 +28,8 @@ GET_TASK_KEYS = {
 FORBIDDEN = (
     "window", "reference", "feasib", "plant", "generated", "proof", "hidden", "tol_fraction",
     "min_abs", "task_inputs", "lowest_target", "state bound", "state_bound", "secant", "logit",
+    # no paper and no known model may be named (the internal names included)
+    "wilson", "cowan", "wc1972", "toy_1pop", "ei_2pop", "wc_shifted", "model card",
 )  # fmt: skip
 CASES = [
     ("exp_toy_1pop.yaml", "toy_1pop_K2_seed300.json"),  # infeasible
@@ -100,6 +103,30 @@ def test_nothing_an_agent_sees_contains_a_forbidden_word(config, task_file):
     _, text = everything_an_agent_sees(config, task_file)
     for word in FORBIDDEN:
         assert word not in text, word
+    # the year, as a whole token (not inside a number such as 0.31972)
+    assert not re.search(r"(?<![0-9.])1972(?![0-9])", text)
+
+
+@pytest.mark.parametrize(
+    ("config", "task_file", "label"),
+    [
+        ("exp_toy_1pop.yaml", "toy_1pop_K2_seed302.json", "model_A"),
+        ("exp_wc1972.yaml", "wc1972_K2_seed401.json", "model_C"),
+    ],
+)
+def test_get_task_shows_a_neutral_model_label(config, task_file, label):
+    task, _ = everything_an_agent_sees(config, task_file)
+    assert task["model"] == label
+
+
+def test_every_internal_model_has_a_public_label():
+    from bench.models.instances import public_label
+
+    assert [public_label(n) for n in ("toy_1pop", "ei_2pop", "wc1972", "wc1972_k1")] == [
+        "model_A", "model_B", "model_C", "model_C",
+    ]  # fmt: skip
+    with pytest.raises(ValueError):
+        public_label("something_else")
 
 
 def test_the_leak_check_would_catch_a_leak():

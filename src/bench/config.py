@@ -9,6 +9,7 @@ An experiment file has these sections (all but `model` optional, defaults below)
     scoring:   settings of the naive / expert objectives
     budget:    number of allowed evaluations
     baseline:  which optimizer conditions B and C use
+    agent:     the LLM agent: backend, model, sampling, limits, prompt (optional)
 
 Every section is checked strictly: an unknown key (usually a typo) is an error, so a config
 can never silently run with a setting that was meant to be something else.
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -137,6 +139,52 @@ class BaselineConfig:
             raise ValueError("baseline.submission_checks must be >= 0")
 
 
+BACKENDS = ("openai_compatible", "anthropic", "fake")
+_ENV_NAME = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+
+
+@dataclass(frozen=True)
+class AgentConfig:
+    """The LLM agent of an episode (section `agent`). Part of the config hash and of every run's
+    config.json, so a run records exactly which model and settings produced it.
+
+    `api_key_env` is the NAME of the environment variable that holds the API key; the key itself
+    is never in a config, a log or a run directory (a name that is not upper-case snake_case is
+    rejected, which also catches a pasted key).
+    """
+
+    backend: str  # "openai_compatible" (vLLM, llama.cpp server, hosted) | "anthropic" | "fake"
+    model: str
+    temperature: float = 0.0
+    max_tokens: int = 4096  # per assistant turn
+    max_turns: int = 60
+    max_tool_calls: int = 40  # the episode's cap on tool calls
+    prompt: str = "system_v1"  # file prompts/<prompt>.md
+    base_url: str | None = None  # openai_compatible: e.g. http://host:8000/v1
+    api_key_env: str | None = None  # name of the environment variable holding the API key
+    max_retries: int = 5  # attempts per request (rate limits, server errors) before a harness error
+    timeout_s: float = 600.0
+
+    def __post_init__(self) -> None:
+        if self.backend not in BACKENDS:
+            raise ValueError(f"agent.backend must be one of {BACKENDS}, got {self.backend!r}")
+        if not self.model:
+            raise ValueError("agent.model must not be empty")
+        if self.temperature < 0 or self.timeout_s <= 0:
+            raise ValueError("agent: temperature must be >= 0 and timeout_s > 0")
+        if min(self.max_tokens, self.max_turns, self.max_tool_calls, self.max_retries) < 1:
+            raise ValueError(
+                "agent: max_tokens, max_turns, max_tool_calls, max_retries must be >= 1"
+            )
+        if self.backend == "openai_compatible" and not self.base_url:
+            raise ValueError("agent.base_url is required for the openai_compatible backend")
+        if self.api_key_env is not None and not _ENV_NAME.match(self.api_key_env):
+            raise ValueError(
+                "agent.api_key_env must be the NAME of an environment variable (UPPER_SNAKE_CASE), "
+                "not a key"
+            )
+
+
 def _section(cls: type, raw: dict[str, Any] | None, name: str, **extra: Any) -> Any:
     """Build dataclass `cls` from a raw YAML dict, rejecting unknown keys and lists->tuples."""
     raw = dict(raw or {})
@@ -164,6 +212,7 @@ class ExperimentConfig:
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     budget: BudgetConfig = field(default_factory=BudgetConfig)
     baseline: BaselineConfig = field(default_factory=BaselineConfig)
+    agent: AgentConfig | None = None  # absent from the resolved config (and hashes) when None
 
     def __post_init__(self) -> None:
         self.model()  # validates the model spec (raises on a bad one)
@@ -193,7 +242,9 @@ class ExperimentConfig:
             del task["tol_fraction"]
         if not task["lowest_target_free"]:
             del task["lowest_target_free"]
+        extra = {"agent": asdict(self.agent)} if self.agent is not None else {}
         d = {
+            **extra,
             "model": self.model_spec,
             "task": task,
             "checker": asdict(self.checker),
@@ -238,7 +289,9 @@ def config_from_dict(
     forbid_extra_stable_states keys, which `resolved()` repeats from `task`, are then ignored.
     In a hand-written file they stay an error.
     """
-    unknown = set(raw) - {"model", "task", "checker", "simulator", "scoring", "budget", "baseline"}
+    unknown = set(raw) - {
+        "model", "task", "checker", "simulator", "scoring", "budget", "baseline", "agent",
+    }  # fmt: skip
     if unknown:
         raise ValueError(f"unknown top-level key(s): {sorted(unknown)}")
     task_raw = dict(raw.get("task") or {})
@@ -269,6 +322,7 @@ def config_from_dict(
         scoring=_section(ScoringConfig, raw.get("scoring"), "scoring"),
         budget=_section(BudgetConfig, raw.get("budget"), "budget"),
         baseline=_section(BaselineConfig, raw.get("baseline"), "baseline"),
+        agent=None if raw.get("agent") is None else _section(AgentConfig, raw["agent"], "agent"),
     )
 
 

@@ -419,3 +419,11 @@ and 0 conservative on the WC selection set).
   name (`wc1972` names the paper); decide whether to neutralize it.
 - Agent loop with fake backend: `src/bench/agent/loop.py`, `fake.py`; prompt `prompts/system_v1.md`.
   `n_tool_calls` in the metrics counts executed calls only (blocked ones are in `n_blocked_calls`).
+
+## LLM backends (2026-10-08; no real LLM run yet) - see docs/agent.md
+- get_task shows neutral model labels (model_A/B/C); the parameter names of model_C are still the
+  paper's notation (c1..c4, a_e, theta_e, ...): decide whether to rename them before real runs.
+- Backends use only the standard library (no openai/anthropic SDK added); `agent` config section is
+  in the hash and in config.json; runner `python -m bench.agent.run`; usage summary per batch.
+- The shared "llm-qwen36" setup found read-only in /etc/bash.bashrc is llama.cpp's llama-server (not
+  vLLM) on port 8001, --jinja, ctx 200000; see the comments of configs/agent_vllm_example.yaml.

@@ -346,3 +346,16 @@ rates come from the environment and were right). Fixed (it now applies `task.inp
 test added, and `bench.batch --reanalyze` rebuilds the tables from the saved run directories
 (done for the selection tables; no run was repeated). Other results (toy, ei_2pop) have no task
 inputs and are unaffected.
+
+## wc1972 test protocol: AMENDMENT 1 (written and committed BEFORE the new runs)
+Reason: the budget grid 500/1000/2000 gave no budget with the best baseline in [0.30, 0.80] (C-cma
+was at 15/15 everywhere, see the result above). C-cma's median first success is about 167
+evaluations, so the informative range is below 500. Only the selection set
+(`tasks/selection/wc1972_K2_seed100..104`) has been used so far; no test task has been run.
+- The budget grid is extended downward to 100, 200 and 300 total evaluations: A, B-cma, C-cma, 3
+  seeds (0-2), same selection set, same settings and submission rule (15 runs per cell).
+- The rule is unchanged and mechanical, applied to all six budgets (100, 200, 300, 500, 1000,
+  2000) with the existing 500/1000/2000 results: among the budgets where the best baseline's
+  success rate is in [0.30, 0.80], pick the one whose rate is closest to 0.60; ties go to the
+  smaller budget; if none qualifies, stop and report. Test conditions and the pre-registered
+  analysis are as in the protocol.

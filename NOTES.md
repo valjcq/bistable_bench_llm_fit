@@ -333,3 +333,16 @@ budget (checker-confirmed first success); wall-clock per run; a per-task table; 
 the 9 tasks with replacement, each task's seeds kept together; as in `scripts/ei2pop_bootstrap.py`).
 A difference between conditions is claimed only when the intervals do not overlap in BOTH the
 run-level (Wilson) and the task-level (bootstrap) analyses. No change after seeing test results.
+
+## wc1972 budget selection: result (protocol above; selection set seeds 100-104, 3 seeds, 15 runs)
+Successes (submitted parameters pass the final check): A 5/15, 6/15, 11/15; B-cma 11/15, 12/15,
+12/15; C-cma 15/15 at every budget, at 500/1000/2000. The best baseline (C-cma) is at 1.00 at all
+three budgets, so NO budget has a best-baseline rate in [0.30, 0.80]: per the protocol, STOP and
+report. No test run was made. Data: `results/wc_selection/`.
+Bug found while reading the table and fixed before reporting: `first_success_eval` (analysis only)
+checked evaluated points with the default model (P = 0) instead of the task's P, so the
+"by 25/50/100%" columns and the first-success medians of WC runs were understated (success
+rates come from the environment and were right). Fixed (it now applies `task.inputs`), regression
+test added, and `bench.batch --reanalyze` rebuilds the tables from the saved run directories
+(done for the selection tables; no run was repeated). Other results (toy, ei_2pop) have no task
+inputs and are unaffected.

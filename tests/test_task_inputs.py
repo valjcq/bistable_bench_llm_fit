@@ -180,3 +180,28 @@ def test_committed_wc_task_files_match_the_current_config(cfg_wc):
         assert task.generation_hash == cfg_wc.generation_hash(), f"{f.name}: stale"
         assert Environment.from_task(cfg_wc, task).check(task.planted_params).success
         assert 0.05 <= abs(task.inputs["P"]) <= 0.3
+
+
+def test_first_success_uses_the_tasks_input(cfg_wc, tmp_path):
+    """Regression: first-success checks must run at the task's P, not at the default P = 0."""
+    from bench.batch import first_success_eval
+    from bench.logging import JsonlLogger
+
+    task = load_task(ROOT / "tasks/wc1972_K2_seed1.json")
+    assert abs(task.inputs["P"]) >= 0.05
+    path = tmp_path / "e.jsonl"
+    with JsonlLogger(path, 0, "h") as lg:
+        args = {"params": task.planted_params, "objective": "expert_v2"}
+        lg.log("b", "evaluate", args, {"value": 0.5}, 10, call_id=None)
+    cfg = replace(cfg_wc, budget=replace(cfg_wc.budget, max_evaluations=11))
+    assert first_success_eval(cfg, task, path) == 1  # the planted point solves its own task
+
+
+def test_reanalyze_rebuilds_the_same_rows_from_the_run_directories(cfg_toy, tmp_path):
+    from bench.batch import parse_conditions, run_batch
+    from bench.config import BudgetConfig
+
+    cfg = replace(cfg_toy, budget=BudgetConfig(30))
+    args = (cfg, [ROOT / "tasks/toy_1pop_K2_seed4.json"], parse_conditions(["A", "C:cma"]), [0])
+    rows = run_batch(*args, tmp_path)
+    assert run_batch(*args, tmp_path, reanalyze=True) == rows

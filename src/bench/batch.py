@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import json
 import math
 import statistics
 from collections.abc import Iterable
@@ -81,6 +82,8 @@ def first_success_eval(cfg: ExperimentConfig, task: Task, events_path: Path) -> 
     counts the agent's own check calls that came before it.
     """
     model = cfg.model()
+    if task.inputs:  # the task's external inputs (e.g. the Wilson-Cowan P) are part of the problem
+        model = model.with_inputs(task.inputs)
     tol = cfg.task.tol
     total = cfg.budget.max_evaluations
     evals = [e for e in read_events(events_path) if e["name"] == "evaluate"]
@@ -117,17 +120,17 @@ def parse_seeds(text: str) -> list[int]:
     return seeds
 
 
-def _one_run(
-    job: tuple[ExperimentConfig, Path, str, str | None, int, Path],
+def _row(
+    cfg: ExperimentConfig,
+    task: Task,
+    task_id: str,
+    condition: str,
+    optimizer: str | None,
+    seed: int,
+    res: dict[str, Any],
+    out_dir: Path,
 ) -> dict[str, Any]:
-    """Run one (task, condition, seed) and return its result row. Top-level so it can be pickled
-    for worker processes; every run is independent (own environment, own log, own seed)."""
-    cfg, task_path, condition, optimizer, seed, out_dir = job
-    task, task_id = load_task(task_path), task_path.stem
-    if condition == "S":
-        res = run_scripted(cfg, task, task_id, seed, out_dir)
-    else:
-        res = run_baseline(cfg, task, task_id, condition, seed, out_dir, optimizer)
+    """One result row from a run's result.json (`res`) and its events.jsonl."""
     metric = res["evaluation_metric"]
     return {
         "label": condition if optimizer is None else f"{condition}-{optimizer}",
@@ -147,6 +150,24 @@ def _one_run(
     }
 
 
+def _one_run(
+    job: tuple[ExperimentConfig, Path, str, str | None, int, Path, bool],
+) -> dict[str, Any]:
+    """Run one (task, condition, seed) and return its result row. Top-level so it can be pickled
+    for worker processes; every run is independent (own environment, own log, own seed).
+    With reanalyze=True nothing is run: the row is rebuilt from the run directory on disk."""
+    cfg, task_path, condition, optimizer, seed, out_dir, reanalyze = job
+    task, task_id = load_task(task_path), task_path.stem
+    if reanalyze:
+        label = condition if condition in ("A", "S") else f"{condition}-{optimizer}"
+        res = json.loads((out_dir / f"{task_id}__{label}__s{seed}" / "result.json").read_text())
+    elif condition == "S":
+        res = run_scripted(cfg, task, task_id, seed, out_dir)
+    else:
+        res = run_baseline(cfg, task, task_id, condition, seed, out_dir, optimizer)
+    return _row(cfg, task, task_id, condition, optimizer, seed, res, out_dir)
+
+
 def run_batch(
     cfg: ExperimentConfig,
     task_paths: list[Path],
@@ -154,6 +175,7 @@ def run_batch(
     seeds: list[int],
     out_dir: Path,
     jobs: int = 1,
+    reanalyze: bool = False,
 ) -> list[dict[str, Any]]:
     """Run every (task, condition, seed) and return one result row per run, in that order.
 
@@ -161,7 +183,7 @@ def run_batch(
     because runs share nothing and each is seeded by its own `seed`.
     """
     work = [
-        (cfg, task_path, condition, optimizer, seed, out_dir)
+        (cfg, task_path, condition, optimizer, seed, out_dir, reanalyze)
         for task_path in task_paths
         for condition, optimizer in conditions
         for seed in seeds
@@ -244,6 +266,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--conditions", nargs="+", required=True)
     ap.add_argument("--seeds", required=True, help="e.g. 0-4 or 1,5,9")
     ap.add_argument("--out", default="runs")
+    ap.add_argument(
+        "--reanalyze",
+        action="store_true",
+        help="do not run anything: rebuild the tables from the run directories already in --out",
+    )
     ap.add_argument("--jobs", type=int, default=1, help="parallel worker processes")
     ap.add_argument("--budget", type=int, help="override budget.max_evaluations (recorded)")
     ap.add_argument("--csv", default="results.csv", help="results CSV (summary goes next to it)")
@@ -259,6 +286,7 @@ def main(argv: list[str] | None = None) -> None:
         parse_seeds(args.seeds),
         Path(args.out),
         args.jobs,
+        args.reanalyze,
     )
     csv_path = Path(args.csv)
     write_csv(csv_path, rows, RESULT_FIELDS)

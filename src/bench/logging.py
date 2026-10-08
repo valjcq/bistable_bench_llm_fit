@@ -90,7 +90,7 @@ class JsonlLogger:
         budget_after: int | None,
         invalid: bool = False,
         call_id: int | None = None,
-        tokens: int | None = None,
+        tokens: Any = None,  # an int, or e.g. {"input": ..., "output": ...} from an LLM backend
         latency: float | None = None,
     ) -> None:
         text = _canonical(output)

@@ -197,16 +197,16 @@ def test_schemas_pass_the_official_metaschema_and_agree_with_the_runtime_validat
         "submit": (
             [
                 {"outcome": "solution", "params": good},
-                {"outcome": "not_found"},
-                {"outcome": "no_solution_exists", "justification": "proof sketch"},
-                {"outcome": "not_found", "params": good, "justification": ""},
+                {"outcome": "no_solution"},
+                {"outcome": "no_solution", "justification": "proof sketch"},
+                {"outcome": "no_solution", "params": good, "justification": ""},
             ],
             [
                 {}, {"params": good}, {"outcome": "maybe"}, {"outcome": 1},
                 {"outcome": "solution", "params": {}}, {"outcome": "solution", "params": {"w": 1}},
-                {"outcome": "not_found", "justification": 3},
-                {"outcome": "not_found", "justification": "x" * 5001},
-                {"outcome": "not_found", "extra": 1},
+                {"outcome": "no_solution", "justification": 3},
+                {"outcome": "no_solution", "justification": "x" * 5001},
+                {"outcome": "no_solution", "extra": 1},
             ],
         ),
     }  # fmt: skip
@@ -359,7 +359,7 @@ def test_submit_records_claim_verdict_and_justification(cfg_toy, toy_task, tmp_p
     assert line["arguments"]["justification"] == "planted point"
 
 
-@pytest.mark.parametrize("outcome", ["not_found", "no_solution_exists"])
+@pytest.mark.parametrize("outcome", ["no_solution"])
 def test_non_solution_claims_need_no_params_and_may_carry_them(cfg_toy, toy_task, outcome):
     ep = _episode(cfg_toy, toy_task, 20)
     ep.call("submit", {"outcome": outcome, "justification": "because"})
@@ -378,7 +378,7 @@ def test_tool_call_cap_counts_logs_and_blocks(cfg_toy, toy_task, tmp_path):
     assert ep.call("get_budget")["tool_calls_used"] == 2
     ep.call("get_budget")  # 3rd
     ep.call("nope")  # 4th: an unknown tool still counts as a call
-    out = ep.call("submit", {"outcome": "not_found"})  # 5th: blocked, nothing is executed
+    out = ep.call("submit", {"outcome": "no_solution"})  # 5th: blocked, nothing is executed
     assert out["error"]["type"] == "tool_call_cap" and not ep.submitted
     assert ep.final_record is None and (ep.n_tool_calls, ep.n_blocked_calls) == (4, 1)
     assert ep.call("get_task")["error"]["type"] == "tool_call_cap" and ep.n_blocked_calls == 2
@@ -395,7 +395,7 @@ def test_default_cap_is_40_and_submit_within_the_cap_works(cfg_toy, toy_task):
     assert ep.max_tool_calls == 40
     for _ in range(39):
         ep.call("get_budget")
-    assert ep.call("submit", {"outcome": "not_found"})["recorded"]  # the 40th call
+    assert ep.call("submit", {"outcome": "no_solution"})["recorded"]  # the 40th call
 
 
 def test_tool_descriptions_are_neutral(cfg_toy, toy_task):

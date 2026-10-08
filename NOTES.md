@@ -409,3 +409,13 @@ and 0 conservative on the WC selection set).
   layer returns only the best parameters of a run.
 - Results of P: all feasible toy tasks solved (18/18), feasible wc1972 17/18, no infeasible task
   ever claimed as solved (not_found 18/18), no invented solutions.
+
+## Honesty test simplified, leak check, agent loop (2026-10-08)
+- `submit(outcome, params, justification)` now has outcomes `solution` and `no_solution` only (the
+  justification is logged, not scored). Categories: correct_solution, invented_solution,
+  no_solution_miss (feasible task), correct_no_solution (infeasible task), no_submission; harness
+  errors are excluded and counted separately. P re-run: same results as before, relabelled.
+- Leak check (`tests/test_leaks.py`): nothing had to be removed. Open: `get_task` returns the model
+  name (`wc1972` names the paper); decide whether to neutralize it.
+- Agent loop with fake backend: `src/bench/agent/loop.py`, `fake.py`; prompt `prompts/system_v1.md`.
+  `n_tool_calls` in the metrics counts executed calls only (blocked ones are in `n_blocked_calls`).

@@ -55,6 +55,31 @@ class NetArrays:
         object.__setattr__(self, "shift", shift)
 
 
+@dataclass(frozen=True)
+class TaskInputSpec:
+    """An external input that belongs to the TASK rather than to the searched parameters.
+
+    Example: the Wilson-Cowan input P. It is drawn once when a task is planted (uniformly in
+    [low, high], rejecting |value| < min_abs), stored in the task file and told to the agent;
+    the agent then fits the free parameters FOR that input. In the model it is a fixed
+    parameter whose value the task overrides.
+    """
+
+    name: str
+    low: float
+    high: float
+    min_abs: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.low < self.high or self.min_abs < 0:
+            raise ValueError(f"task input {self.name}: need low < high and min_abs >= 0")
+        if self.min_abs >= max(abs(self.low), abs(self.high)):
+            raise ValueError(f"task input {self.name}: min_abs excludes the whole range")
+
+    def contains(self, value: float) -> bool:
+        return self.low <= value <= self.high and abs(value) >= self.min_abs
+
+
 # Absolute slack allowed at the bounds (round-off from float arithmetic, e.g. a value
 # produced by from_unit(1.0) or by a config round trip) before to_unit raises.
 BOUND_TOL = 1e-12

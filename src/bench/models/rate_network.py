@@ -10,12 +10,12 @@ directly. `RateNetwork` adds the model-specific part (names, bounds, `build`).
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.special import expit
 
-from bench.models.base import NetArrays, ParamSpace
+from bench.models.base import NetArrays, ParamSpace, TaskInputSpec
 
 BuildFn = Callable[[Mapping[str, float]], NetArrays]
 
@@ -169,6 +169,12 @@ class RateNetwork:
     observed: tuple[str, ...]  # subset of populations that targets refer to
     space: ParamSpace
     build: BuildFn  # full params (free + fixed) -> NetArrays, applies structure + Dale signs
+    # Range of observed rates that "typical" targets live in. Set by the config (not derived from
+    # the parameters): the tolerance is a fraction of its width and the planting window a fraction
+    # of it. The logistic models use [0, 1] (= [0, r_max]).
+    reference_range: tuple[float, float] = (0.0, 1.0)
+    # External inputs that belong to the task (see TaskInputSpec); empty for the logistic models.
+    task_inputs: tuple[TaskInputSpec, ...] = ()
 
     def __post_init__(self) -> None:
         if len(self.types) != len(self.populations):
@@ -191,6 +197,20 @@ class RateNetwork:
         so every comparison between a state and a target uses `r[observed_idx]`.
         """
         return np.array([self.populations.index(p) for p in self.observed])
+
+    def with_inputs(self, inputs: Mapping[str, float]) -> RateNetwork:
+        """The same model with the task's external inputs set (they override the fixed values).
+
+        `inputs` must hold exactly the declared task inputs, each inside its allowed range.
+        """
+        specs = {s.name: s for s in self.task_inputs}
+        if set(inputs) != set(specs):
+            raise ValueError(f"expected task inputs {sorted(specs)}, got {sorted(inputs)}")
+        for name, value in inputs.items():
+            if not specs[name].contains(value):
+                raise ValueError(f"task input {name}={value} outside its allowed range")
+        fixed = {**self.space.fixed, **{k: float(v) for k, v in inputs.items()}}
+        return replace(self, space=ParamSpace(self.space.free, fixed))
 
     def state_bounds(self, params: Mapping[str, float]) -> tuple[np.ndarray, np.ndarray]:
         """Model-provided state bounds (lo, hi) per population for these parameters.

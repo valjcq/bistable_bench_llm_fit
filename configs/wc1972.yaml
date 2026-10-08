@@ -1,6 +1,7 @@
 # Wilson & Cowan (1972) excitatory-inhibitory model, eqs. 11, 12, 15 of the paper (see
-# docs/model_cards/wilson_cowan_1972.md). Free: the card's proposed search box (a difficulty
-# knob, wider than the span of the paper's own parameter sets). Fixed: tau_e = tau_i = 10 (the
+# docs/model_cards/wilson_cowan_1972.md). Free: a search box wider than the span of the paper's
+# own parameter sets (a difficulty knob) but with a*theta >= 2, which keeps the state range
+# close to the paper's regime (card, "Free parameters"). Fixed: tau_e = tau_i = 10 (the
 # card's interpretation; stability of foci depends on the ratio), refractory coefficients 1,
 # inputs P = Q = 0. k_e, k_i (maximum of the response) are not set: k = S(+inf) by default; use
 # wc1972_k1.yaml for k = 1.
@@ -9,15 +10,19 @@ builder: wc1972
 populations: [E, I]
 types: [E, I]
 observed: [E]  # the paper's hysteresis figures plot E only
+reference_range: [0.0, 0.5]  # typical observed rates (E tops out near 0.48); tol and the planting
+                             # window are fractions of this range
+task_inputs:  # drawn when a task is planted, stored in the task file, told to the agent
+  P: {low: -0.3, high: 0.3, min_abs: 0.05}  # external input to E (the fixed P below is the default)
 free:
   c1: {low: 0.5, high: 25.0, log: false}  # E -> E synapses per excitatory cell
   c2: {low: 0.5, high: 25.0, log: false}  # I -> E (stored positive, applied as -c2)
   c3: {low: 0.5, high: 25.0, log: false}  # E -> I
   c4: {low: 0.5, high: 25.0, log: false}  # I -> I (stored positive, applied as -c4)
-  a_e: {low: 0.5, high: 7.0, log: false}  # slope of the excitatory sigmoid
-  theta_e: {low: 1.0, high: 6.0, log: false}
-  a_i: {low: 0.5, high: 7.0, log: false}
-  theta_i: {low: 1.0, high: 6.0, log: false}
+  a_e: {low: 1.0, high: 7.0, log: false}  # slope of the excitatory sigmoid
+  theta_e: {low: 2.0, high: 5.0, log: false}
+  a_i: {low: 1.0, high: 7.0, log: false}
+  theta_i: {low: 2.0, high: 5.0, log: false}
 fixed:
   P: 0.0
   Q: 0.0

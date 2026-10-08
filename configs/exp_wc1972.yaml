@@ -1,0 +1,32 @@
+# Experiment: fit K=2 target states of the Wilson-Cowan (1972) model at a task-specific input P.
+# NOT USED YET: no WC tasks, budgets or runs exist (open design decisions, see NOTES.md). This
+# file exists so tolerance, window and the feasibility report have a config to use.
+model: wc1972.yaml  # relative to this file
+
+task:
+  K: 2
+  tol_fraction: 0.02  # tol = 0.02 * (width 0.5 of the reference range) = 0.01
+  noise: 0.0
+  seed: 0
+  forbid_extra_stable_states: false
+  target_window: [0.05, 0.95]     # fractions of the reference range [0, 0.5]
+  min_separation_tol_factor: 3.0  # targets must differ by more than 3 * tol
+  max_attempts: 5000
+  prefilter_starts: 16
+
+checker: {}  # numerical defaults; tol/forbid_extra come from `task`
+
+simulator:
+  dt: 0.1
+  flow_tol: 1.0e-6
+  hold_tau_factor: 5.0
+  T: 500.0
+
+scoring:
+  naive_ic_fractions: [0.0, 1.0]  # fractions of the model's state bounds [lo, hi]
+
+budget:
+  max_evaluations: 200  # PLACEHOLDER: the Wilson-Cowan budget is not decided
+
+baseline:
+  optimizer: cma

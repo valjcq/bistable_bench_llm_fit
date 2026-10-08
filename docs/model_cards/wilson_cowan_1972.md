@@ -202,6 +202,18 @@ The paper does not give fitting ranges or priors. Everything in this section is 
 - Free (8): c1, c2, c3, c4, a_e, θ_e, a_i, θ_i. Optional 9th: P (the input at which bistability is required).
 - Fixed: r_e = r_i = 1 [p.12], τ_e = τ_i (e.g. 10 ms, cf. p.17), Q = 0, k = S(+∞).
 - Span of the paper's own five sets: c1 12–16, c2 4–15, c3 13–22, c4 2–11, a_e 1–1.5, θ_e 2–4, a_i 1–6, θ_i 2.5–4.3. A search box should be wider than this so the task is not trivial (e.g. c ∈ [0, 25], a ∈ [0.5, 7], θ ∈ [1, 6]); the box width is a difficulty knob.
+- **[interpretation] Search box used by `configs/wc1972.yaml` (revised): c in [0.5, 25], a in
+  [1, 7], theta in [2, 5].** Reason: the lower state bound is set by the sigmoid's lower
+  asymptote S_min = -1/(1 + exp(a*theta)), so a*theta controls how far below 0 the states can
+  go. The box proposed above allowed a*theta = 0.5, which gives S_min = -0.38 and a state range
+  of about [-0.38, 0.24], far from the paper's regime (its sets have a*theta between 3.2 and 26).
+  The revised box contains all four paper sets (Fig. 4/5, 6, 7/8, 11) and guarantees
+  a*theta >= 2, hence S_min >= -0.119 and a lower state bound >= -0.12. The upper bound stays
+  near 0.5 for large a*theta. The box width remains a difficulty knob.
+- **[interpretation] The input P belongs to the task**, not to the free parameters: it is drawn
+  when a task is planted (uniform in [-0.3, 0.3], |P| >= 0.05), stored in the task file and told
+  to the agent; Q = 0. Tolerance and planting window are fractions (2% and 5-95%) of a reference
+  range of [0, 0.5] set in the model config, since E tops out near 0.48.
 - Hard constraints from the paper: c_j > 0, a > 0; c2 and c3 nonzero.
 - Condition 17 is a cheap diagnostic (sufficient condition for the kink), not a valid filter: it is not necessary.
 

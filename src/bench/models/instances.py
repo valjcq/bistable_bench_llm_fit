@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import yaml
 
-from bench.models.base import NetArrays, ParamSpace, ParamSpec
+from bench.models.base import NetArrays, ParamSpace, ParamSpec, TaskInputSpec
 from bench.models.rate_network import RateNetwork
 
 
@@ -120,7 +120,10 @@ def model_from_dict(cfg: Mapping[str, Any]) -> RateNetwork:
     eagerly: unknown keys, unknown builders and bad bounds raise immediately, so a
     typo in a config fails at load time instead of producing a silently wrong model.
     """
-    allowed = {"name", "builder", "populations", "types", "observed", "free", "fixed"}
+    allowed = {
+        "name", "builder", "populations", "types", "observed", "free", "fixed",
+        "reference_range", "task_inputs",
+    }  # fmt: skip
     extra = set(cfg) - allowed
     if extra:
         raise ValueError(f"unknown model config keys: {sorted(extra)}")
@@ -131,6 +134,16 @@ def model_from_dict(cfg: Mapping[str, Any]) -> RateNetwork:
         for name, s in cfg["free"].items()
     )
     fixed = {k: float(v) for k, v in cfg["fixed"].items()}
+    ref = tuple(float(x) for x in cfg.get("reference_range", (0.0, 1.0)))
+    if len(ref) != 2 or not ref[0] < ref[1]:
+        raise ValueError("reference_range must be [low, high] with low < high")
+    inputs = tuple(
+        TaskInputSpec(name, float(s["low"]), float(s["high"]), float(s.get("min_abs", 0.0)))
+        for name, s in cfg.get("task_inputs", {}).items()
+    )
+    for spec in inputs:
+        if spec.name not in fixed:
+            raise ValueError(f"task input {spec.name!r} must also be a fixed parameter (default)")
     return RateNetwork(
         name=cfg["name"],
         populations=tuple(cfg["populations"]),
@@ -138,6 +151,8 @@ def model_from_dict(cfg: Mapping[str, Any]) -> RateNetwork:
         observed=tuple(cfg["observed"]),
         space=ParamSpace(free, fixed),
         build=BUILDERS[cfg["builder"]],
+        reference_range=ref,
+        task_inputs=inputs,
     )
 
 

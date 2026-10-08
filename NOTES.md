@@ -252,3 +252,26 @@ Run as amended; report in `docs/ei2pop_test.md`, data in `results/ei_test/`. C-c
   `computed`; the checker reproduces the card's P intervals exactly for both k choices.
 - Needs a design decision before WC tasks: tolerance on the WC range (E tops out near 0.48), and
   avoiding tasks solvable by remembering the paper's parameter values.
+
+## Wilson-Cowan: decisions of 2026-10-08 (still no WC task files, budgets or runs)
+- Box (`wc1972.yaml`, `wc1972_k1.yaml`): c [0.5, 25], a [1, 7], theta [2, 5]; reason in the card
+  ([interpretation] under "Free parameters"). All four paper sets are inside.
+- `reference_range` is a model-config field (logistic models: [0, 1] implicit, not in their hashes;
+  wc1972: [0, 0.5]). `task.tol_fraction` (0.02) gives tol = fraction * range width: 0.02 for the
+  logistic models (unchanged, they set `tol` directly), 0.01 for WC. The planting window is
+  5-95% of the reference range. `tol_fraction` and the new model keys are omitted from the
+  hashes of configs that do not use them (golden test + committed task hashes unchanged).
+- The external input P is a task input: drawn at planting in [-0.3, 0.3], |P| >= 0.05, stored in
+  the task file (`inputs`), applied by `Environment.from_task`, returned by get_task() as
+  `inputs`. Q = 0. Eight free parameters.
+- Feasibility (`scripts/wc_feasibility.py`, `results/wc_feasibility.md`): with the 5-95% window
+  essentially no random draw gives a task: 1 of 5000 for K=2, 0 for K=3, although 43% of draws
+  have >= 2 stable states. The stable states sit at the ends of the range (lowest E ~ 0, highest
+  E ~ 0.5, both saturated for large a*theta), outside [0.025, 0.475]. Needs a design decision.
+
+## For the agent stage: memorization probe
+Log, for every parameter set the agent proposes (run_optimizer results, check_bistability,
+simulate, submit), the distance to the nearest Wilson-Cowan paper set (Fig. 4/5, 6, 7/8, 11; in
+`configs/wc1972_paper_sets.yaml`), in the unit cube of the search box, as a memorization probe.
+Possible later: one explicit probe task built from the Fig. 4 set, analysed separately and never
+included in the main results.

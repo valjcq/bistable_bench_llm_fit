@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import Counter
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -40,8 +40,12 @@ class Task:
     generation_hash: str  # ExperimentConfig.generation_hash() at generation time
     n_attempts: int  # random draws needed
     rejections: dict[str, int]  # why draws were rejected (diagnostics)
+    # External inputs of the task (e.g. the Wilson-Cowan P), drawn at planting and given to the
+    # agent. Empty for models without task inputs; then absent from the file.
+    inputs: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        extra = {"inputs": self.inputs} if self.inputs else {}
         return {
             "format_version": 1,
             "model": self.model_name,
@@ -53,6 +57,7 @@ class Task:
             "generation_hash": self.generation_hash,
             "n_attempts": self.n_attempts,
             "rejections": self.rejections,
+            **extra,
         }
 
     @classmethod
@@ -67,6 +72,7 @@ class Task:
             generation_hash=d["generation_hash"],
             n_attempts=int(d["n_attempts"]),
             rejections=dict(d["rejections"]),
+            inputs={k: float(v) for k, v in d.get("inputs", {}).items()},
         )
 
 
@@ -103,18 +109,37 @@ def _pick_separated(
 
 
 def target_window_bounds(
-    model: RateNetwork, params: dict[str, float], window: tuple[float, float]
+    model: RateNetwork, window: tuple[float, float]
 ) -> tuple[np.ndarray, np.ndarray]:
     """Absolute (lo, hi) of the planting window for the observed populations.
 
-    `window` = (f_lo, f_hi) are fractions (default 5% to 95%) of the FEASIBLE range of each
-    observed population, i.e. of the model's state bounds (`RateNetwork.state_bounds`): the
-    logistic models give [0, r_max], so the window is f * r_max as before; Wilson-Cowan gives
-    its own, slightly asymmetric range (E may dip a little below 0).
+    `window` = (f_lo, f_hi) are fractions (default 5% to 95%) of the model's REFERENCE range
+    (set in the model config, not derived from the parameters): [0, 1] for the logistic models,
+    so the window is 0.05 to 0.95 as before; [0, 0.5] for Wilson-Cowan, whose rates top out near
+    0.48. Targets near either end sit in the saturated tail where a tolerance is meaningless.
     """
-    b_lo, b_hi = model.state_bounds(params)
-    b_lo, b_hi = b_lo[model.observed_idx], b_hi[model.observed_idx]
-    return b_lo + window[0] * (b_hi - b_lo), b_lo + window[1] * (b_hi - b_lo)
+    ref_lo, ref_hi = model.reference_range
+    width = ref_hi - ref_lo
+    n_obs = len(model.observed)
+    lo = np.full(n_obs, ref_lo + window[0] * width)
+    hi = np.full(n_obs, ref_lo + window[1] * width)
+    return lo, hi
+
+
+def draw_task_inputs(model: RateNetwork, rng: np.random.Generator) -> dict[str, float]:
+    """Draw the task's external inputs (e.g. P): uniform in [low, high], |value| >= min_abs.
+
+    Rejection sampling, in the order the model declares the inputs. Models without task inputs
+    draw nothing and do not touch the random stream (so older tasks are unchanged).
+    """
+    out: dict[str, float] = {}
+    for spec in model.task_inputs:
+        while True:
+            value = float(rng.uniform(spec.low, spec.high))
+            if abs(value) >= spec.min_abs:
+                break
+        out[spec.name] = value
+    return out
 
 
 def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None = None) -> Task:
@@ -145,12 +170,14 @@ def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None =
 
     for attempt in range(1, tc.max_attempts + 1):
         params = model.space.from_unit(rng.random(model.space.dim))
-        lo, hi = target_window_bounds(model, params, tc.target_window)
+        inputs = draw_task_inputs(model, rng)  # {} for models without task inputs
+        task_model = model.with_inputs(inputs) if inputs else model
+        lo, hi = target_window_bounds(task_model, tc.target_window)
 
         def in_window(rows: np.ndarray, lo: np.ndarray = lo, hi: np.ndarray = hi) -> bool:
             return bool(np.all((rows >= lo) & (rows <= hi)))
 
-        stable = find_stable_states(model, params, cheap)
+        stable = find_stable_states(task_model, params, cheap)
         candidates = [np.array(fp.observed) for fp in stable if in_window(np.array(fp.observed))]
         if len(candidates) < K:
             rejected["fewer_than_K_stable_states_in_window"] += 1
@@ -166,7 +193,7 @@ def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None =
                 rejected["noisy_targets_outside_window_or_too_close"] += 1
                 continue
         targets = targets[np.argsort(targets.mean(axis=1), kind="stable")]
-        if not check(model, params, targets, config.checker).success:
+        if not check(task_model, params, targets, config.checker).success:
             rejected["planted_params_fail_full_check"] += 1
             continue
         return Task(
@@ -179,6 +206,7 @@ def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None =
             generation_hash=config.generation_hash(),
             n_attempts=attempt,
             rejections=dict(rejected),
+            inputs=inputs,
         )
 
     raise TaskGenerationError(

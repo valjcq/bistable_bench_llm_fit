@@ -203,16 +203,12 @@ def test_box_is_invariant_and_contains_every_fixed_point(set_name, k_one):
         assert (np.array(fp.r) >= lo - 1e-9).all() and (np.array(fp.r) <= hi + 1e-9).all()
 
 
-def test_planting_window_is_a_fraction_of_the_feasible_range(wc, toy):
-    p = params_of("fig4_5")
-    b_lo, b_hi = wc.state_bounds(p)
-    lo, hi = target_window_bounds(wc, p, (0.05, 0.95))
-    np.testing.assert_allclose(lo, b_lo[:1] + 0.05 * (b_hi - b_lo)[:1])
-    np.testing.assert_allclose(hi, b_lo[:1] + 0.95 * (b_hi - b_lo)[:1])
-    assert lo[0] < 0.0 < hi[0]  # the feasible range of E starts below 0
-    # logistic: exactly the old 5% / 95% of r_max
-    q = {"w": 6.0, "I": 2.0, "k": 1.0}
-    lo_t, hi_t = target_window_bounds(toy, q, (0.05, 0.95))
+def test_planting_window_is_a_fraction_of_the_reference_range(wc, toy):
+    """5% to 95% of the model's configured reference range: [0, 0.5] for Wilson-Cowan (so
+    0.025 to 0.475), [0, 1] for the logistic models (0.05 to 0.95, exactly as before)."""
+    lo, hi = target_window_bounds(wc, (0.05, 0.95))
+    assert lo.tolist() == [0.025] and hi.tolist() == [0.475]
+    lo_t, hi_t = target_window_bounds(toy, (0.05, 0.95))
     assert lo_t[0] == 0.05 * 1.0 and hi_t[0] == 0.95 * 1.0
 
 
@@ -357,8 +353,8 @@ def test_computed_p_intervals_with_two_or_more_stable_states(set_name, k_one):
 
 
 def test_checker_and_simulator_agree_on_random_wc_parameters(wc):
-    """Random parameters in the card's proposed box (c in [0.5, 25], a in [0.5, 7], theta in
-    [1, 6]), P = Q = 0. Simulate from random initial states inside the state bounds.
+    """Random parameters in the search box of configs/wc1972.yaml (c in [0.5, 25], a in [1, 7],
+    theta in [2, 5]), P = Q = 0. Simulate from random initial states inside the state bounds.
       A. a simulation SETTLES on a state that is not one of the checker's stable fixed points
          -> the checker missed a stable state (strict failure);
       B. a stable state the checker found that no simulation reaches -> warning only (its basin

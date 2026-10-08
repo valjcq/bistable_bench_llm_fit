@@ -36,6 +36,11 @@ class TaskConfig:
 
     K: int = 2  # number of target states
     tol: float = 0.02  # success: abs error per observed population <= tol
+    # If set, tol is DERIVED as tol_fraction * (width of the model's reference range) when the
+    # config is loaded (so 0.02 for the logistic models with range [0, 1], 0.01 for Wilson-Cowan
+    # with [0, 0.5]). `tol` then holds that value; the fraction is kept for the record. Left None
+    # (and omitted from the resolved config and its hashes) for configs that give `tol` directly.
+    tol_fraction: float | None = None
     noise: float = 0.0  # std (in rate units) of Gaussian noise added to the planted targets
     seed: int = 0  # default seed for task generation / environment randomness
     forbid_extra_stable_states: bool = False  # if True, extra stable states make success False
@@ -53,6 +58,8 @@ class TaskConfig:
         lo, hi = self.target_window
         if self.K < 2:
             raise ValueError("task.K must be >= 2")
+        if self.tol_fraction is not None and self.tol_fraction <= 0:
+            raise ValueError("task.tol_fraction must be > 0")
         if self.tol <= 0 or self.noise < 0 or self.min_separation_tol_factor < 0:
             raise ValueError("task: tol must be > 0, noise and min_separation_tol_factor >= 0")
         if not 0.0 <= lo < hi <= 1.0:
@@ -156,6 +163,10 @@ class ExperimentConfig:
 
     def __post_init__(self) -> None:
         self.model()  # validates the model spec (raises on a bad one)
+        if self.task.tol_fraction is not None:
+            lo, hi = self.model().reference_range
+            if abs(self.task.tol - self.task.tol_fraction * (hi - lo)) > 1e-12:
+                raise ValueError("task.tol must equal task.tol_fraction * reference range width")
         if (self.checker.tol, self.checker.forbid_extra_stable_states) != (
             self.task.tol,
             self.task.forbid_extra_stable_states,
@@ -173,9 +184,12 @@ class ExperimentConfig:
 
     def resolved(self) -> dict[str, Any]:
         """Everything that defines the experiment, defaults included, as plain JSON types."""
+        task = asdict(self.task)
+        if task["tol_fraction"] is None:  # a default-valued new field must not enter the hash
+            del task["tol_fraction"]
         d = {
             "model": self.model_spec,
-            "task": asdict(self.task),
+            "task": task,
             "checker": asdict(self.checker),
             "simulator": asdict(self.simulator),
             "scoring": asdict(self.scoring),
@@ -221,7 +235,14 @@ def config_from_dict(
     unknown = set(raw) - {"model", "task", "checker", "simulator", "scoring", "budget", "baseline"}
     if unknown:
         raise ValueError(f"unknown top-level key(s): {sorted(unknown)}")
-    task = _section(TaskConfig, raw.get("task"), "task")
+    task_raw = dict(raw.get("task") or {})
+    if task_raw.get("tol_fraction") is not None:
+        lo, hi = model_spec.get("reference_range", (0.0, 1.0))
+        derived = float(task_raw["tol_fraction"]) * (float(hi) - float(lo))
+        if "tol" in task_raw and not (resolved and abs(task_raw["tol"] - derived) < 1e-12):
+            raise ValueError("give either task.tol or task.tol_fraction, not both")
+        task_raw["tol"] = derived
+    task = _section(TaskConfig, task_raw, "task")
     checker_raw = {
         k: v
         for k, v in (raw.get("checker") or {}).items()

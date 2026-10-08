@@ -54,9 +54,14 @@ class Environment:
         targets: np.ndarray,
         seed: int,
         event_hook: EventHook | None = None,
+        inputs: Mapping[str, float] | None = None,
     ) -> None:
         self._config = config
         self._model = config.model()
+        # External inputs of the task (e.g. the Wilson-Cowan P), told to the agent by describe().
+        self._inputs = dict(inputs or {})
+        if self._model.task_inputs or self._inputs:
+            self._model = self._model.with_inputs(self._inputs)
         targets = np.array(targets, dtype=float)  # private copy
         if targets.shape != (config.task.K, len(self._model.observed)):
             raise ValueError(
@@ -85,7 +90,7 @@ class Environment:
             )
         if task.K != config.task.K:
             raise ValueError(f"task has K={task.K} but config.task.K={config.task.K}")
-        return cls(config, task.targets, task.seed, event_hook)
+        return cls(config, task.targets, task.seed, event_hook, task.inputs)
 
     # ---- read-only information -------------------------------------------------------
 
@@ -119,7 +124,9 @@ class Environment:
     def describe(self) -> dict[str, Any]:
         """What an agent may know about the problem (no dynamics, no hidden parameters)."""
         m = self._model
+        extra = {"inputs": dict(self._inputs)} if self._inputs else {}
         return {
+            **extra,
             "model": m.name,
             "populations": list(m.populations),
             "types": list(m.types),

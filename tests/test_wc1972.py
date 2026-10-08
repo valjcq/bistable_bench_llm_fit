@@ -371,7 +371,10 @@ def test_checker_and_simulator_agree_on_random_wc_parameters(wc):
         stable = np.array([res.fixed_points[i].r for i in res.stable_indices]).reshape(-1, 2)
         n_multistable += res.n_stable >= 2
         lo, hi = wc.state_bounds(p)
-        x0s = lo + rng.random((n_ic, 2)) * (hi - lo)
+        corners = np.array([[lo[0], lo[1]], [lo[0], hi[1]], [hi[0], lo[1]], [hi[0], hi[1]]])
+        # random states plus the box corners: saturated states have small basins that random
+        # states can miss, the corners reach them
+        x0s = np.vstack([lo + rng.random((n_ic, 2)) * (hi - lo), corners])
         reached: set[int] = set()
         for sim in simulate_batch(wc, p, x0s, T=2000.0):
             if not sim.settled:

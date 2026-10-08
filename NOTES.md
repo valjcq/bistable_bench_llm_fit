@@ -275,3 +275,30 @@ simulate, submit), the distance to the nearest Wilson-Cowan paper set (Fig. 4/5,
 `configs/wc1972_paper_sets.yaml`), in the unit cube of the search box, as a memorization probe.
 Possible later: one explicit probe task built from the Fig. 4 set, analysed separately and never
 included in the main results.
+
+## Wilson-Cowan window: decision (design stage, no test data involved) and what followed
+- Window for WC (`configs/exp_wc1972.yaml`): the HIGH target E in [0.05, 0.45] (fractions
+  [0.1, 0.9] of the reference range [0, 0.5], away from saturation); the LOW target is
+  unconstrained (`task.lowest_target_free: true`; K = 2 only), separation >= 3 tol = 0.03. The
+  quiescent state E ~ 0 is the background state (the paper's own Fig. 4 low state is 0), so the
+  low target is nearly free: the difficulty is a stable active state at the high target. The
+  logistic models keep the symmetric 5-95% window; their files and hashes are unchanged
+  (`lowest_target_free` is omitted from the resolved config when False). Box unchanged
+  (a [1, 7], theta [2, 5], c [0.5, 25]). K = 3 is out of scope for WC.
+- Feasibility (`scripts/wc_feasibility.py`, `results/wc_feasibility.md`; 5000 draws, P ~ U[-0.3, 0.3]
+  with |P| >= 0.05, tol 0.01): K=2 under the adopted window needs **74 draws per task** with the
+  planting prefilter (68 / 5000 = 1.4%, Wilson range 58-93 draws) and 68 with the full search.
+  The old symmetric window: 1 / 5000. For comparison only (NOT adopted): a_e restricted to [1, 2]
+  gives 17 draws per task [15, 18].
+- Corner starts: the checker's global search (N >= 2, all models) now always adds the 2^N corners
+  of the state box. The toy / ei_2pop golden outputs did NOT change (no update needed). Effect: the
+  planting prefilter finds >= 2 stable states in 41.9% of WC draws instead of 37.0% (same draws).
+  The cross-check warning about the stable state at E ~ 0.478 was never a checker miss (the
+  256-start search already found it): simulations from random states did not reach its small
+  basin. It disappears when the box corners are added to the simulation initial states, as the
+  cross-check now does.
+- Task files generated (WC planting is cheap, under 1000 draws per task): selection set
+  `tasks/selection/wc1972_K2_seed100..104` (63, 11, 68, 125, 58 attempts) and test set
+  `tasks/wc1972_K2_seed1..9` (47, 105, 11, 53, 74, 30, 4, 12, 8 attempts). The low targets are
+  all within [-0.04, 0.02], i.e. the background state, as predicted. NOT used yet: no WC budget,
+  no WC benchmark run.

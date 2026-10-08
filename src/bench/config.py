@@ -51,6 +51,10 @@ class TaskConfig:
     # Planted targets must be farther apart than factor * tol (max abs difference over observed
     # populations), so their tolerance boxes are clearly distinct.
     min_separation_tol_factor: float = 3.0
+    # If True, the LOWEST planted target is exempt from the window (the other K-1 must lie in it).
+    # For Wilson-Cowan, whose quiescent background state E ~ 0 is the natural low state. Only
+    # K = 2 is implemented with it. Default False, omitted from the resolved config and its hashes.
+    lowest_target_free: bool = False
     max_attempts: int = 5000  # random parameter draws before giving up
     prefilter_starts: int = 16  # multi-start count of the cheap prefilter (N>=2)
 
@@ -187,6 +191,8 @@ class ExperimentConfig:
         task = asdict(self.task)
         if task["tol_fraction"] is None:  # a default-valued new field must not enter the hash
             del task["tol_fraction"]
+        if not task["lowest_target_free"]:
+            del task["lowest_target_free"]
         d = {
             "model": self.model_spec,
             "task": task,

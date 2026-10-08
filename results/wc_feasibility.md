@@ -1,30 +1,26 @@
-Wilson-Cowan feasibility: 5000 draws in the wc1972 box (seed 0), P ~ U[-0.3, 0.3], |P| >= 0.05; tol = 0.01, planting window E in [0.025, 0.475], separation >= 0.03.
+Wilson-Cowan feasibility, K=2: 5000 draws per scenario (seed 0), P ~ U[-0.3, 0.3], |P| >= 0.05, tol = 0.01.
+Asymmetric rule: high target E in [0.05, 0.45], low target free, separation >= 0.03. Symmetric (old) rule: both in [0.025, 0.475].
 
-| criterion | prefilter (16 starts): fraction [Wilson 95%] | full (256 starts): fraction [Wilson 95%] |
+### box of wc1972.yaml (adopted)
+
+| criterion | prefilter (planting) | full (256 starts) |
 |---|---|---|
-| >= 2 stable states | 1852/5000 = 0.3704 [0.3571, 0.3839] | 2147/5000 = 0.4294 [0.4157, 0.4432] |
-| >= 3 stable states | 4/5000 = 0.0008 [0.0003, 0.0021] | 4/5000 = 0.0008 [0.0003, 0.0021] |
-| >= 2 usable stable states (E in window) | 1/5000 = 0.0002 [0.0000, 0.0011] | 1/5000 = 0.0002 [0.0000, 0.0011] |
-| K=2: >= 2 usable, separated by >= 3 tol | 1/5000 = 0.0002 [0.0000, 0.0011] | 1/5000 = 0.0002 [0.0000, 0.0011] |
-| K=3: >= 3 usable, separated by >= 3 tol | 0/5000 = 0.0000 [0.0000, 0.0008] | 0/5000 = 0.0000 [0.0000, 0.0008] |
+| >= 2 stable states | 2096/5000 = 0.4192 [0.4056, 0.4329] | 2152/5000 = 0.4304 [0.4167, 0.4442] |
+| K=2, asymmetric rule (adopted) | 68/5000 = 0.0136 [0.0107, 0.0172] | 74/5000 = 0.0148 [0.0118, 0.0185] |
+| K=2, symmetric rule (old) | 1/5000 = 0.0002 [0.0000, 0.0011] | 1/5000 = 0.0002 [0.0000, 0.0011] |
 
-Draws per task (1 / fraction; range from the Wilson interval):
+Draws per task, K=2, asymmetric rule: **74 [58, 93]** with the planting prefilter, 68 [54, 85] with the full search (1 / fraction, [range from the Wilson interval]).
 
-| K | prefilter (what planting uses) | full |
+Stable states of the 2152 draws with >= 2 (full): lowest E percentiles [5, 25, 50, 75, 95]: [-0.0017, -0.0, -0.0, 0.0, 0.0011]; highest E: [0.4663, 0.4983, 0.5, 0.5, 0.5].
+
+### a_e in [1, 2] (comparison only, not adopted)
+
+| criterion | prefilter (planting) | full (256 starts) |
 |---|---|---|
-| 2 | 5000 [883, 28325] | 5000 [883, 28325] |
-| 3 | no success in the sample | no success in the sample |
+| >= 2 stable states | 1781/5000 = 0.3562 [0.3430, 0.3696] | 1831/5000 = 0.3662 [0.3530, 0.3797] |
+| K=2, asymmetric rule (adopted) | 303/5000 = 0.0606 [0.0543, 0.0676] | 332/5000 = 0.0664 [0.0598, 0.0736] |
+| K=2, symmetric rule (old) | 13/5000 = 0.0026 [0.0015, 0.0044] | 14/5000 = 0.0028 [0.0017, 0.0047] |
 
-Where the stable states sit (2147 draws with >= 2 stable states, full effort):
+Draws per task, K=2, asymmetric rule: **17 [15, 18]** with the planting prefilter, 15 [14, 17] with the full search (1 / fraction, [range from the Wilson interval]).
 
-- lowest stable E, percentiles [5, 25, 50, 75, 95]: [-0.0018, -0.0, -0.0, 0.0, 0.0011]
-- highest stable E, percentiles [5, 25, 50, 75, 95]: [0.4663, 0.4983, 0.5, 0.5, 0.5]
-- lowest state inside the window (E >= 0.025): 0.0005 of them; highest inside (E <= 0.475): 0.0592; both: 0.0005
-
-Sensitivity of the K=2 count (of all draws) to the window, same separation rule:
-
-| window for E | draws with K=2 |
-|---|---|
-| [0.025, 0.475] | 1/5000 |
-| [0.005, 0.495] | 35/5000 |
-| [0.000, 0.500] | 1072/5000 |
+Stable states of the 1831 draws with >= 2 (full): lowest E percentiles [5, 25, 50, 75, 95]: [-0.0243, -0.0026, -0.0002, 0.0011, 0.0089]; highest E: [0.3392, 0.468, 0.4904, 0.4973, 0.4996].

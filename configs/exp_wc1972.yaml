@@ -1,6 +1,6 @@
 # Experiment: fit K=2 target states of the Wilson-Cowan (1972) model at a task-specific input P.
-# NOT USED YET: no WC tasks, budgets or runs exist (open design decisions, see NOTES.md). This
-# file exists so tolerance, window and the feasibility report have a config to use.
+# Window decision: see NOTES.md ("Wilson-Cowan window"). The budget below is a PLACEHOLDER: the
+# Wilson-Cowan budget is not decided and no benchmark run exists.
 model: wc1972.yaml  # relative to this file
 
 task:
@@ -9,7 +9,11 @@ task:
   noise: 0.0
   seed: 0
   forbid_extra_stable_states: false
-  target_window: [0.05, 0.95]     # fractions of the reference range [0, 0.5]
+  # Asymmetric window for Wilson-Cowan: the HIGH target must lie in [0.1, 0.9] of the reference
+  # range [0, 0.5], i.e. E in [0.05, 0.45] (away from saturation); the LOW target is free (the
+  # quiescent state E ~ 0 is the background state, the paper's own Fig. 4 low state).
+  target_window: [0.1, 0.9]
+  lowest_target_free: true
   min_separation_tol_factor: 3.0  # targets must differ by more than 3 * tol
   max_attempts: 5000
   prefilter_starts: 16

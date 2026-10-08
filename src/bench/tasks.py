@@ -108,6 +108,35 @@ def _pick_separated(
     return None
 
 
+def pick_targets(
+    stable: list[np.ndarray],
+    K: int,
+    lo: np.ndarray,
+    hi: np.ndarray,
+    min_sep: float,
+    lowest_free: bool,
+    rng: np.random.Generator,
+) -> list[np.ndarray] | None:
+    """Choose the K planted targets among the observed values of the stable states, or None.
+
+    Normal rule: K candidates inside the window [lo, hi], pairwise farther than min_sep.
+    With `lowest_free` (K = 2 only): the HIGH target must lie in the window; the LOW target may be
+    any stable state at least min_sep below it (for Wilson-Cowan the quiescent state near 0, which
+    is the paper's own low state and sits outside any window of "typical" rates).
+    """
+    in_window = [v for v in stable if bool(np.all((v >= lo) & (v <= hi)))]
+    if not lowest_free:
+        return _pick_separated(in_window, K, min_sep, rng)
+    if K != 2:
+        raise NotImplementedError("task.lowest_target_free is only implemented for K = 2")
+    for i in rng.permutation(len(in_window)):
+        high = in_window[i]
+        lower = [v for v in stable if high.mean() - v.mean() > min_sep]
+        if lower:
+            return [lower[int(rng.integers(len(lower)))], high]
+    return None
+
+
 def target_window_bounds(
     model: RateNetwork, window: tuple[float, float]
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -152,7 +181,8 @@ def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None =
          `task.prefilter_starts` starts; keep those whose observed rates lie in the target
          window; need at least K of them. (A cheap search may miss states: that only costs
          acceptance rate, never correctness, because step 4 re-verifies everything.)
-      2. pick K candidates pairwise separated by more than min_separation_tol_factor * tol;
+      2. pick K candidates pairwise separated by more than min_separation_tol_factor * tol (with
+         `task.lowest_target_free` the lowest one is exempt from the window, see `pick_targets`);
       3. add Gaussian noise (task.noise), then re-check window and separation;
       4. full check of the planted params against the final targets: must succeed.
     Same (config, seed, K) -> identical task: all randomness comes from default_rng(seed).
@@ -178,18 +208,20 @@ def make_task(config: ExperimentConfig, seed: int | None = None, K: int | None =
             return bool(np.all((rows >= lo) & (rows <= hi)))
 
         stable = find_stable_states(task_model, params, cheap)
-        candidates = [np.array(fp.observed) for fp in stable if in_window(np.array(fp.observed))]
-        if len(candidates) < K:
+        stable_obs = [np.array(fp.observed) for fp in stable]
+        candidates = [v for v in stable_obs if in_window(v)]
+        if len(candidates) < (1 if tc.lowest_target_free else K):
             rejected["fewer_than_K_stable_states_in_window"] += 1
             continue
-        chosen = _pick_separated(candidates, K, min_sep, rng)
+        chosen = pick_targets(stable_obs, K, lo, hi, min_sep, tc.lowest_target_free, rng)
         if chosen is None:
             rejected["targets_too_close"] += 1
             continue
         targets = np.array(chosen)
         if tc.noise > 0:
             targets = targets + rng.normal(0.0, tc.noise, targets.shape)
-            if not (in_window(targets) and _separated(targets, min_sep)):
+            checked = np.sort(targets, axis=0)[1:] if tc.lowest_target_free else targets
+            if not (in_window(checked) and _separated(targets, min_sep)):
                 rejected["noisy_targets_outside_window_or_too_close"] += 1
                 continue
         targets = targets[np.argsort(targets.mean(axis=1), kind="stable")]

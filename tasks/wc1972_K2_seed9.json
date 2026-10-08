@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "model": "wc1972",
+  "observed": [
+    "E"
+  ],
+  "seed": 9,
+  "K": 2,
+  "targets": [
+    [
+      0.018333743577572757
+    ],
+    [
+      0.4340457219924241
+    ]
+  ],
+  "planted_params": {
+    "c1": 15.016892774116005,
+    "c2": 16.07913667246504,
+    "c3": 8.411191966499356,
+    "c4": 18.15478163187443,
+    "a_e": 1.087999140107948,
+    "theta_e": 3.131659410959805,
+    "a_i": 1.3279834043594207,
+    "theta_i": 2.377467723875556
+  },
+  "generation_hash": "ca380c7a72ce8384087f0728b070bc2c9e16dbbc8f81a66f4dd5c298ae086add",
+  "n_attempts": 8,
+  "rejections": {
+    "fewer_than_K_stable_states_in_window": 6,
+    "targets_too_close": 1
+  },
+  "inputs": {
+    "P": 0.24275266182541982
+  }
+}

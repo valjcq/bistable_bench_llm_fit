@@ -239,9 +239,10 @@ def find_fixed_points_nd(
         start from every point of a small grid over them (cfg.n_unobserved_grid levels each).
         This is the part that matters for success: if the parameters really realize a target,
         a fixed point sits next to it and Newton converges to it quickly and exactly.
-    (b) GLOBAL: Newton from cfg.n_starts points of a seeded Latin hypercube over the box
-        state box [lo, hi]^N. It discovers the OTHER fixed points (extra stable states, the saddles
-        between states) that margins and the expert objective need. It can miss some.
+    (b) GLOBAL: Newton from cfg.n_starts points of a seeded Latin hypercube over the
+        state box [lo, hi]^N, plus the 2^N corners of that box. It discovers the OTHER fixed
+        points (extra stable states, the saddles between states) that margins and the expert
+        objective need. It can miss some.
 
     Roots from both parts are merged, de-duplicated by Euclidean distance (cfg.dedup_tol_nd)
     and sorted, so the result is deterministic.
@@ -261,6 +262,10 @@ def find_fixed_points_nd(
             starts.append(s)
     lhs = qmc.LatinHypercube(d=n, rng=np.random.default_rng(cfg.seed)).random(cfg.n_starts)
     starts += list(lo + lhs * (hi - lo))
+    # (c) The 2^N corners of the state box, always. Saturated states (every population pinned near
+    # a bound) are fixed points whose Newton basin is tiny from a random start but obvious from the
+    # corner; a Latin hypercube with few starts can miss them (Wilson-Cowan: E near 0.5).
+    starts += [np.array(c) for c in itertools.product(*zip(lo, hi, strict=True))]
 
     unique: list[np.ndarray] = []
     for s in starts:

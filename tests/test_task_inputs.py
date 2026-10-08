@@ -114,3 +114,69 @@ def test_a_wc_task_can_be_planted_with_its_input_and_is_told_to_the_agent(cfg_wc
     info = Episode(cfg, task, seed=0).call("get_task")
     assert info["inputs"] == {"P": P} and info["tol"] == pytest.approx(0.01)
     assert "planted" not in json.dumps(info)
+
+
+# ---- asymmetric window (lowest target free) and corner starts --------------------------------
+
+
+def test_lowest_target_free_is_omitted_from_old_hashes_and_validated(cfg_wc, cfg_toy):
+    assert cfg_wc.task.lowest_target_free and "lowest_target_free" in cfg_wc.resolved()["task"]
+    assert "lowest_target_free" not in cfg_toy.resolved()["task"]  # default: not in the hash
+    from bench.tasks import pick_targets
+
+    rng = np.random.default_rng(0)
+    lo, hi = np.array([0.05]), np.array([0.45])
+    with pytest.raises(NotImplementedError):
+        pick_targets([np.array([0.1])], 3, lo, hi, 0.03, True, rng)
+
+
+def test_pick_targets_low_is_free_and_high_must_be_in_the_window():
+    from bench.tasks import pick_targets
+
+    rng = np.random.default_rng(0)
+    lo, hi = np.array([0.05]), np.array([0.45])
+    v = lambda *xs: [np.array([x]) for x in xs]  # noqa: E731
+    got = pick_targets(v(0.0, 0.3), 2, lo, hi, 0.03, True, rng)
+    assert [float(g[0]) for g in got] == [0.0, 0.3]  # low is outside the window: allowed
+    assert pick_targets(v(0.0, 0.5), 2, lo, hi, 0.03, True, rng) is None  # high saturated
+    assert pick_targets(v(0.28, 0.3), 2, lo, hi, 0.03, True, rng) is None  # too close
+    both = pick_targets(v(0.1, 0.4), 2, lo, hi, 0.03, True, rng)
+    assert [float(g[0]) for g in both] == [0.1, 0.4]  # an in-window state may be the low one
+    assert pick_targets(v(0.0, 0.3), 2, lo, hi, 0.03, False, rng) is None  # normal rule: both
+
+
+def test_wc_planting_with_the_adopted_window_is_cheap_and_solvable(cfg_wc):
+    task = make_task(cfg_wc, seed=5)
+    assert task.n_attempts < 1000 and 0.05 <= abs(task.inputs["P"]) <= 0.3
+    low, high = task.targets.ravel()
+    assert 0.05 <= high <= 0.45 and high - low > 3 * cfg_wc.task.tol
+    assert Environment.from_task(cfg_wc, task).check(task.planted_params).success
+
+
+def test_corner_starts_find_the_saturated_states_with_a_single_random_start(wc_free_p):
+    """With ONE random start the box corners still find the quiescent and the saturated stable
+    states of the paper's Fig. 4 set (0, 0) and (0.44, 0.226) (found without a target)."""
+    from bench.checker import CheckerConfig, find_stable_states
+    from bench.models.wc1972 import free_params, paper_sets
+
+    s = paper_sets()["fig4_5"]
+    stable = find_stable_states(wc_free_p, {**free_params(s), "P": 0.0}, CheckerConfig(n_starts=1))
+    found = sorted(round(fp.r[0], 3) for fp in stable)
+    assert found == [0.0, 0.44]
+
+
+@pytest.fixture(scope="module")
+def wc_free_p(cfg_wc):
+    from bench.models.wc1972 import with_free_input
+
+    return with_free_input(cfg_wc.model())
+
+
+def test_committed_wc_task_files_match_the_current_config(cfg_wc):
+    for f in sorted((ROOT / "tasks").glob("wc1972_K2_seed*.json")) + sorted(
+        (ROOT / "tasks/selection").glob("wc1972_K2_seed*.json")
+    ):
+        task = load_task(f)
+        assert task.generation_hash == cfg_wc.generation_hash(), f"{f.name}: stale"
+        assert Environment.from_task(cfg_wc, task).check(task.planted_params).success
+        assert 0.05 <= abs(task.inputs["P"]) <= 0.3

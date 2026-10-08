@@ -229,6 +229,16 @@ The paper does not give fitting ranges or priors. Everything in this section is 
 
 ---
 
+- **[computed, feasibility] In Wilson-Cowan tasks the low target is nearly free.** In the search
+  box of `configs/wc1972.yaml`, among random parameter sets with at least two stable states the
+  lowest stable E is almost always the quiescent state: percentiles 5/25/50/75/95 of the lowest E
+  are -0.0017, -0.0, -0.0, 0.0, 0.0011 (`results/wc_feasibility.md`), and the paper's own Fig. 4
+  low state is exactly 0. So the task's low target is the background state E ~ 0 and costs the
+  fit nothing; the real difficulty is a stable ACTIVE state at the high target E (the highest
+  stable E is about 0.5, saturated, for most multistable draws, so a high target in
+  [0.05, 0.45] is rare: about 1.5% of random draws qualify). Task windows therefore leave the low
+  target unconstrained and require the high one in E in [0.05, 0.45] (NOTES.md).
+
 ## Ambiguities and interpretations
 
 1. **k_e, k_i**: defined in words only. Interpretation k = S(+∞). Changes steady-state values by a few hundredths and moves loop edges by up to ≈ 0.1 in P (Fig. 4 set: left edge −0.39 vs −0.51).

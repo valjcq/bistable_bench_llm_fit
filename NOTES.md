@@ -386,3 +386,12 @@ intervals (35%), so about 13 / 2000 = 0.65% of draws (roughly 150 draws per task
 usable hysteresis task. Over all intervals the active state is in the window only 9.6% of the
 time. Caveat: the 256-start search found bistability that the 16-start one missed in 12 of 1600
 sampled (draw, P) cases.
+
+## wc1972 test: done
+Run as pre-registered (budget 200, tasks seed1..9, 5 seeds, conditions A, B-cma, B-tpe, C-cma,
+C-tpe); report `docs/wc_test.md`, data `results/wc_test/`, task-level analysis from the generic
+`scripts/task_bootstrap.py`. C-cma 28/45, C-tpe 23/45, B-tpe 14/45, B-cma 12/45, A 5/45. Claimed
+differences under the rule (non-overlap in both analyses): A below C-cma and below C-tpe only.
+Post-hoc selection-headroom analysis of existing results: `results/selection_headroom.md` (the SBS
+is C-cma in all three models; the gap to the per-task oracle is 0 for toy and ei_2pop, 0.067 plain
+and 0 conservative on the WC selection set).

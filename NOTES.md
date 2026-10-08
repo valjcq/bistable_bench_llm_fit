@@ -359,3 +359,18 @@ evaluations, so the informative range is below 500. Only the selection set
   success rate is in [0.30, 0.80], pick the one whose rate is closest to 0.60; ties go to the
   smaller budget; if none qualifies, stop and report. Test conditions and the pre-registered
   analysis are as in the protocol.
+
+## wc1972 budget selection after amendment 1: result
+Successes of the submitted parameters (15 runs per cell, selection set, seeds 0-2):
+
+| budget | A | B-cma | C-cma | best baseline |
+|---|---|---|---|---|
+| 100 | 3/15 | 2/15 | 3/15 | 0.20 (outside the band) |
+| 200 | 3/15 | 5/15 | 9/15 | 0.60 (in band, distance 0.00) |
+| 300 | 5/15 | 9/15 | 10/15 | 0.67 (in band, distance 0.07) |
+| 500 | 5/15 | 11/15 | 15/15 | 1.00 |
+| 1000 | 6/15 | 12/15 | 15/15 | 1.00 |
+| 2000 | 11/15 | 12/15 | 15/15 | 1.00 |
+
+Rule (best baseline in [0.30, 0.80], closest to 0.60): the candidates are 200 and 300; **200 is
+selected** (C-cma at exactly 0.60). No test run was made. Data: `results/wc_selection/`.

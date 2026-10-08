@@ -37,8 +37,9 @@ TOY = ROOT / "tasks/honesty/toy_1pop_K2_seed302.json"
 class MockTransport:
     """Returns queued responses (or raises queued exceptions) and records every request."""
 
-    def __init__(self, *queue):
+    def __init__(self, *queue, gets=None):
         self.queue, self.requests = list(queue), []
+        self.gets, self.get_requests = dict(gets or {}), []  # GET url -> response / exception
 
     def post(self, url, headers, payload, timeout):
         self.requests.append({"url": url, "headers": dict(headers), "payload": payload})
@@ -46,6 +47,26 @@ class MockTransport:
         if isinstance(item, Exception):
             raise item
         return item
+
+
+def _get(self, url, headers, timeout):
+    self.get_requests.append({"url": url, "headers": dict(headers)})
+    item = self.gets.get(url, HttpResponse(404, {}, "not found"))
+    if isinstance(item, Exception):
+        raise item
+    return item
+
+
+MockTransport.get = _get
+
+
+class NoNetwork:
+    """A transport that fails the test if it is used at all."""
+
+    def post(self, *a, **k):
+        raise AssertionError("the network was used")
+
+    get = post
 
 
 def ok(body):
@@ -445,8 +466,155 @@ def test_usage_summary():
 
 
 def test_example_config_is_fully_commented_out_and_nothing_refers_to_the_server():
-    lines = (ROOT / "configs/agent_vllm_example.yaml").read_text().splitlines()
+    lines = (ROOT / "configs/agent_llamacpp_example.yaml").read_text().splitlines()
     assert all(ln.strip() == "" or ln.lstrip().startswith("#") for ln in lines)
     assert yaml.safe_load("\n".join(lines)) is None
     # no source file mentions the server's port: nothing in the repo depends on it
     assert "8001" not in "".join(p.read_text() for p in (ROOT / "src").rglob("*.py"))
+
+
+# ---- sampling parameters -----------------------------------------------------------------------
+
+
+def test_sampling_parameters_are_validated_and_sent_only_when_set():
+    for bad in ({"top_p": 0.0}, {"top_p": 1.5}, {"top_k": -1}, {"min_p": 1.5}):
+        with pytest.raises(ValueError):
+            agent_cfg(**bad)
+    with pytest.raises(ValueError, match="min_p"):
+        agent_cfg("anthropic", min_p=0.0)
+    plain = MockTransport(openai_reply("x"))
+    OpenAICompatibleBackend(agent_cfg(), transport=plain).generate(MESSAGES, SPECS)
+    assert not {"top_p", "top_k", "min_p"} & set(plain.requests[0]["payload"])
+    qwen = MockTransport(openai_reply("x"))
+    cfg = agent_cfg(temperature=0.6, top_p=0.95, top_k=20, min_p=0.0)
+    OpenAICompatibleBackend(cfg, transport=qwen).generate(MESSAGES, SPECS)
+    p = qwen.requests[0]["payload"]
+    assert (p["temperature"], p["top_p"], p["top_k"], p["min_p"]) == (
+        0.6,
+        0.95,
+        20,
+        0.0,
+    )  # 0.0 sent
+    ant = MockTransport(anthropic_reply([{"type": "text", "text": "x"}]))
+    b = AnthropicBackend(agent_cfg("anthropic", top_p=0.9, top_k=5), transport=ant,
+                         environ={"ANTHROPIC_API_KEY": "k"})  # fmt: skip
+    b.generate(MESSAGES, SPECS)
+    assert (ant.requests[0]["payload"]["top_p"], ant.requests[0]["payload"]["top_k"]) == (0.9, 5)
+    assert "min_p" not in ant.requests[0]["payload"]
+
+
+# ---- the preflight (mocked HTTP) ---------------------------------------------------------------
+
+GGUF = "/opt/shared/models/qwen3.6-35b/Qwen3.6-35B-A3B-UD-IQ4_XS.gguf"
+BASE = "http://host:8001/v1"
+
+
+def llama_server(model_path=GGUF):
+    """What llama-server answers: /v1/models and /props."""
+    return {
+        f"{BASE}/models": ok({"data": [{"id": model_path}]}),
+        "http://host:8001/props": ok({
+            "model_path": model_path, "total_slots": 4,
+            "default_generation_settings": {"n_ctx": 50000},
+        }),
+    }  # fmt: skip
+
+
+def llama_cfg(**kw):
+    return agent_cfg(
+        base_url=BASE, expected_model="Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
+        model_description="Qwen3.6-35B-A3B, GGUF UD-IQ4_XS", **kw,
+    )  # fmt: skip
+
+
+def test_preflight_records_what_the_server_reports():
+    from bench.agent.backends import preflight
+
+    t = MockTransport(gets=llama_server())
+    info = preflight(llama_cfg(), transport=t)
+    assert info["matched"] and info["models_endpoint"] == [GGUF]
+    assert info["props"] == {"model_path": GGUF, "model_alias": None,
+                             "n_ctx_per_slot": 50000, "total_slots": 4}  # fmt: skip
+    assert [r["url"] for r in t.get_requests] == [f"{BASE}/models", "http://host:8001/props"]
+    assert t.requests == []  # no completion was requested
+
+
+def test_preflight_aborts_on_a_mismatch_with_a_clear_error():
+    from bench.agent.backends import preflight
+
+    t = MockTransport(gets=llama_server("/opt/shared/models/gemma4-26b/gemma-4-26B.gguf"))
+    with pytest.raises(BackendError, match=r"reports.*gemma-4-26B.gguf.*expected_model.*Qwen3.6"):
+        preflight(llama_cfg(), transport=t)
+
+
+def test_preflight_works_without_props_and_needs_expected_model_and_a_reachable_server():
+    from bench.agent.backends import preflight
+
+    only_models = {f"{BASE}/models": ok({"data": [{"id": "Qwen3.6-35B-A3B-UD-IQ4_XS.gguf"}]})}
+    info = preflight(llama_cfg(), transport=MockTransport(gets=only_models))  # /props -> 404
+    assert info["props"] == {}
+    with pytest.raises(BackendError, match="expected_model is required"):
+        preflight(agent_cfg(), transport=MockTransport())
+    down = MockTransport(gets={f"{BASE}/models": HttpResponse(503, {}, "down")})
+    with pytest.raises(BackendError, match="attempts failed"):
+        preflight(llama_cfg(max_retries=2), transport=down, sleep=lambda s: None)
+    assert preflight(agent_cfg("anthropic"), transport=MockTransport()) == {}  # hosted: none
+
+
+def test_preflight_sends_the_key_but_never_records_it():
+    from bench.agent.backends import preflight
+
+    t = MockTransport(gets=llama_server())
+    info = preflight(llama_cfg(api_key_env="MY_KEY"), transport=t, environ={"MY_KEY": SECRET})
+    assert t.get_requests[0]["headers"]["Authorization"] == f"Bearer {SECRET}"
+    assert SECRET not in json.dumps(info)
+
+
+# ---- the real runner path (mocked HTTP) and the dry-run guarantee ------------------------------
+
+
+def runner_args(tmp_path, *extra):
+    f = tmp_path / "agent.yaml"
+    f.write_text(yaml.safe_dump({"agent": {
+        "backend": "openai_compatible", "base_url": BASE, "model": "m-1",
+        "expected_model": "Qwen3.6-35B-A3B-UD-IQ4_XS.gguf", "temperature": 0.6, "top_p": 0.95,
+        "top_k": 20, "min_p": 0.0, "model_description": "Qwen3.6-35B-A3B, GGUF UD-IQ4_XS",
+    }}))  # fmt: skip
+    return [str(ROOT / "configs/exp_toy_1pop.yaml"), "--agent", str(f), "--budget", "60",
+            "--out", str(tmp_path / "runs"), "--task", str(TOY), "--seed", "0", *extra]  # fmt: skip
+
+
+def test_real_runner_runs_the_preflight_and_records_it_in_config_json(tmp_path, capsys):
+    t = MockTransport(
+        openai_reply("", [("get_task", "{}")]),
+        openai_reply("", [("submit", json.dumps({"outcome": "no_solution"}))]),
+        gets=llama_server(),
+    )
+    run_main(runner_args(tmp_path), transport=t)
+    assert "preflight ok" in capsys.readouterr().out
+    saved = json.loads((tmp_path / "runs/toy_1pop_K2_seed302__m-1__s0/config.json").read_text())
+    assert saved["server_preflight"]["models_endpoint"] == [GGUF]
+    assert saved["server_preflight"]["props"]["n_ctx_per_slot"] == 50000
+    agent = saved["experiment"]["agent"]
+    assert (agent["temperature"], agent["top_p"], agent["top_k"], agent["min_p"]) == (
+        0.6,
+        0.95,
+        20,
+        0.0,
+    )
+    assert agent["model_description"] == "Qwen3.6-35B-A3B, GGUF UD-IQ4_XS"
+    assert agent["expected_model"] == "Qwen3.6-35B-A3B-UD-IQ4_XS.gguf"
+    assert t.requests[0]["payload"]["top_k"] == 20  # and the sampling reached the request
+
+
+def test_real_runner_aborts_before_any_episode_on_a_model_mismatch(tmp_path):
+    t = MockTransport(gets=llama_server("/opt/shared/models/qwen3.6-27b/Qwen3.6-27B.gguf"))
+    with pytest.raises(SystemExit, match="preflight failed"):
+        run_main(runner_args(tmp_path), transport=t)
+    assert t.requests == [] and not (tmp_path / "runs").exists()  # no completion, no run directory
+
+
+def test_dry_run_never_uses_the_network_or_the_preflight(tmp_path):
+    args = runner_args(tmp_path, "--dry-run")
+    run_main(args, transport=NoNetwork())  # any transport use would raise
+    assert (tmp_path / "runs/toy_1pop_K2_seed302__dryrun__s0/result.json").exists()

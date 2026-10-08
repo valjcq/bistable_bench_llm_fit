@@ -65,6 +65,8 @@ class Transport(Protocol):
         self, url: str, headers: Mapping[str, str], payload: dict[str, Any], timeout: float
     ) -> HttpResponse: ...
 
+    def get(self, url: str, headers: Mapping[str, str], timeout: float) -> HttpResponse: ...
+
 
 class UrllibTransport:
     """The real HTTP transport (standard library)."""
@@ -75,6 +77,12 @@ class UrllibTransport:
         req = urllib.request.Request(
             url, data=json.dumps(payload).encode(), headers=dict(headers), method="POST"
         )
+        return self._send(req, timeout)
+
+    def get(self, url: str, headers: Mapping[str, str], timeout: float) -> HttpResponse:
+        return self._send(urllib.request.Request(url, headers=dict(headers), method="GET"), timeout)
+
+    def _send(self, req: urllib.request.Request, timeout: float) -> HttpResponse:
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
                 return _response(resp.status, resp.headers, resp.read())
@@ -107,11 +115,24 @@ def post_with_retries(
     jitter: Callable[[], float] = random.random,
 ) -> tuple[HttpResponse, int]:
     """POST with exponential backoff; returns (response, attempts used). Raises BackendError."""
+    return request_with_retries(
+        lambda: transport.post(url, headers, payload, timeout), max_attempts, sleep, jitter
+    )
+
+
+def request_with_retries(
+    send: Callable[[], HttpResponse],
+    max_attempts: int,
+    sleep: Callable[[float], None] = time.sleep,
+    jitter: Callable[[], float] = random.random,
+) -> tuple[HttpResponse, int]:
+    """Call `send()` until it returns status 200, retrying 429, 5xx and transport errors with
+    exponential backoff (see the module docstring). Returns (response, attempts used)."""
     last = "no attempt"
     for attempt in range(1, max_attempts + 1):
         retry_after = None
         try:
-            resp = transport.post(url, headers, payload, timeout)
+            resp = send()
         except TransportError as e:
             last = str(e)
         else:
@@ -299,6 +320,9 @@ class OpenAICompatibleBackend(_Backend):
             "temperature": self._cfg.temperature,
             "max_tokens": self._cfg.max_tokens,
         }
+        for name in ("top_p", "top_k", "min_p"):  # optional: sent only when set
+            if getattr(self._cfg, name) is not None:
+                payload[name] = getattr(self._cfg, name)
         headers = {"Content-Type": "application/json"}
         if self._key:
             headers["Authorization"] = f"Bearer {self._key}"
@@ -345,6 +369,9 @@ class AnthropicBackend(_Backend):
             "messages": conv,
             "tools": to_anthropic_tools(tools),
         }
+        for name in ("top_p", "top_k"):  # optional: sent only when set (min_p does not exist here)
+            if getattr(self._cfg, name) is not None:
+                payload[name] = getattr(self._cfg, name)
         headers = {"Content-Type": "application/json", "anthropic-version": ANTHROPIC_VERSION}
         if self._key:
             headers["x-api-key"] = self._key
@@ -372,6 +399,74 @@ class AnthropicBackend(_Backend):
             reasoning=thinking or None,
             meta={"finish_reason": body.get("stop_reason"), "attempts": attempts},
         )
+
+
+def preflight(
+    cfg: AgentConfig,
+    transport: Transport | None = None,
+    sleep: Callable[[float], None] = time.sleep,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Ask an OpenAI-compatible server what it is serving, and refuse a mismatch.
+
+    Run ONLY by the real runner (never in --dry-run, never in tests against a real server). It
+    queries GET {base_url}/models and, for llama.cpp, GET <server root>/props (a failure of /props
+    is ignored: vLLM and hosted APIs do not have it). The reported names are every model id, the
+    file name of each id and the file name of `model_path` in /props. If `agent.expected_model` is
+    not among them, BackendError is raised with a clear message, before any episode. Returns what
+    was found (to be recorded in each run's config.json): the model ids, the llama.cpp props that
+    matter (model_path, alias, context per slot, number of slots) and the match.
+    """
+    if cfg.backend != "openai_compatible":
+        return {}
+    if not cfg.expected_model:
+        raise BackendError("agent.expected_model is required for a real openai_compatible run")
+    transport = transport or UrllibTransport()
+    env = os.environ if environ is None else environ
+    headers: dict[str, str] = {}
+    if cfg.api_key_env:
+        if not env.get(cfg.api_key_env):
+            raise BackendError(f"environment variable {cfg.api_key_env} is not set")
+        headers["Authorization"] = f"Bearer {env[cfg.api_key_env]}"
+    base = (cfg.base_url or "").rstrip("/")
+    resp, _ = request_with_retries(
+        lambda: transport.get(f"{base}/models", headers, cfg.timeout_s), cfg.max_retries, sleep
+    )
+    try:
+        ids = [m["id"] for m in resp.body["data"]]
+    except (KeyError, TypeError) as e:
+        raise BackendError(f"preflight: unexpected /models response: {_excerpt(resp.body)}") from e
+    root = base[: -len("/v1")] if base.endswith("/v1") else base
+    props: dict[str, Any] = {}
+    try:
+        p = transport.get(f"{root}/props", headers, cfg.timeout_s)
+        if p.status == 200 and isinstance(p.body, dict):
+            gen = p.body.get("default_generation_settings") or {}
+            props = {
+                "model_path": p.body.get("model_path"),
+                "model_alias": p.body.get("model_alias"),
+                "n_ctx_per_slot": gen.get("n_ctx"),
+                "total_slots": p.body.get("total_slots"),
+            }
+    except TransportError:
+        pass
+    reported = set(ids) | {os.path.basename(i) for i in ids}
+    if props.get("model_path"):
+        reported |= {props["model_path"], os.path.basename(props["model_path"])}
+    if props.get("model_alias"):
+        reported.add(props["model_alias"])
+    if cfg.expected_model not in reported:
+        raise BackendError(
+            f"preflight: the server at {base} reports {sorted(reported)} but agent.expected_model "
+            f"is {cfg.expected_model!r}; nothing was run"
+        )
+    return {
+        "models_endpoint": ids,
+        "props": props,
+        "expected_model": cfg.expected_model,
+        "matched": True,
+        "queried_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
 
 
 def make_backend(cfg: AgentConfig, **kwargs: Any) -> Any:

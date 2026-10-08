@@ -118,6 +118,25 @@ def public_label(model_name: str) -> str:
     raise ValueError(f"no public label for model {model_name!r}: add one to PUBLIC_LABELS")
 
 
+# What an agent calls the free parameters of a model, where the internal names would give the model
+# away (Wilson-Cowan's own notation). Internal name -> agent-facing name; applied only at the tool
+# layer (bench.tools); task files, configs and logs keep the internal names.
+PUBLIC_PARAM_NAMES = {
+    "wc1972": {
+        "c1": "w_EE", "c2": "w_EI", "c3": "w_IE", "c4": "w_II",
+        "a_e": "gain_E", "theta_e": "thresh_E", "a_i": "gain_I", "theta_i": "thresh_I",
+    },
+}  # fmt: skip
+
+
+def public_param_names(model_name: str) -> dict[str, str]:
+    """Internal -> agent-facing parameter names of a model ({} if they are shown unchanged)."""
+    for prefix, names in PUBLIC_PARAM_NAMES.items():
+        if model_name.startswith(prefix):
+            return dict(names)
+    return {}
+
+
 BUILDERS: dict[str, Callable[[Mapping[str, float]], NetArrays]] = {
     "toy_1pop": build_toy_1pop,
     "ei_2pop": build_ei_2pop,

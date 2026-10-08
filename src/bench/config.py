@@ -156,6 +156,11 @@ class AgentConfig:
     backend: str  # "openai_compatible" (vLLM, llama.cpp server, hosted) | "anthropic" | "fake"
     model: str
     temperature: float = 0.0
+    # Optional sampling parameters, sent to the API only when set. top_k and min_p are extensions
+    # (accepted by llama.cpp and vLLM; top_k also by Anthropic, min_p not).
+    top_p: float | None = None
+    top_k: int | None = None
+    min_p: float | None = None
     max_tokens: int = 4096  # per assistant turn
     max_turns: int = 60
     max_tool_calls: int = 40  # the episode's cap on tool calls
@@ -164,8 +169,21 @@ class AgentConfig:
     api_key_env: str | None = None  # name of the environment variable holding the API key
     max_retries: int = 5  # attempts per request (rate limits, server errors) before a harness error
     timeout_s: float = 600.0
+    # openai_compatible, real runs: what the server must report it is serving (checked by the
+    # preflight before any episode; a mismatch aborts), and a free-text description of the model
+    # (e.g. the GGUF quantization) that is recorded with the config.
+    expected_model: str | None = None
+    model_description: str | None = None
 
     def __post_init__(self) -> None:
+        if self.top_p is not None and not 0 < self.top_p <= 1:
+            raise ValueError("agent.top_p must be in (0, 1]")
+        if self.top_k is not None and self.top_k < 0:
+            raise ValueError("agent.top_k must be >= 0")
+        if self.min_p is not None and not 0 <= self.min_p <= 1:
+            raise ValueError("agent.min_p must be in [0, 1]")
+        if self.backend == "anthropic" and self.min_p is not None:
+            raise ValueError("agent.min_p is not supported by the Anthropic API")
         if self.backend not in BACKENDS:
             raise ValueError(f"agent.backend must be one of {BACKENDS}, got {self.backend!r}")
         if not self.model:

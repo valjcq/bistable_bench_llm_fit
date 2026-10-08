@@ -29,7 +29,7 @@ from typing import Any
 
 import yaml
 
-from bench.agent.backends import make_backend
+from bench.agent.backends import BackendError, make_backend, preflight
 from bench.agent.loop import load_system_prompt, run_agent
 from bench.batch import parse_seeds
 from bench.config import AgentConfig, BudgetConfig, ExperimentConfig, load_config
@@ -59,14 +59,23 @@ def run_label(agent: AgentConfig) -> str:
 
 
 def run_one(
-    cfg: ExperimentConfig, task_path: str | Path, seed: int, out_dir: str | Path
+    cfg: ExperimentConfig,
+    task_path: str | Path,
+    seed: int,
+    out_dir: str | Path,
+    server_info: dict[str, Any] | None = None,
+    transport: Any = None,
 ) -> dict[str, Any]:
-    """One agent episode on one task; returns the CSV row (the run directory is written)."""
+    """One agent episode on one task; returns the CSV row (the run directory is written).
+
+    `server_info` is what the preflight found out about the server (recorded in config.json);
+    `transport` replaces the HTTP layer (tests).
+    """
     agent = cfg.agent
     assert agent is not None
     task, task_id = load_task(task_path), Path(task_path).stem
     prompt = load_system_prompt(agent.prompt)
-    backend = make_backend(agent)
+    backend = make_backend(agent, transport=transport) if transport else make_backend(agent)
 
     def play(episode: Any) -> Any:
         return run_agent(episode, backend, prompt, max_turns=agent.max_turns)
@@ -77,6 +86,7 @@ def run_one(
             "agent_label": run_label(agent),
             "prompt_file": f"prompts/{agent.prompt}.md",
             "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+            **({"server_preflight": server_info} if server_info else {}),
         },
     )  # fmt: skip
 
@@ -108,7 +118,8 @@ def _job(args: tuple) -> dict[str, Any]:
     return run_one(*args)
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None, transport: Any = None) -> None:
+    """CLI entry. `transport` replaces the HTTP layer (tests only)."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     ap.add_argument("config", help="experiment YAML (may contain an agent: section)")
     ap.add_argument("--agent", help="agent YAML supplying or replacing the agent section")
@@ -127,15 +138,28 @@ def main(argv: list[str] | None = None) -> None:
     cfg = resolve_agent(load_config(args.config), args.agent, args.dry_run)
     if args.budget is not None:
         cfg = replace(cfg, budget=BudgetConfig(args.budget))
+    # Preflight: a REAL run against an OpenAI-compatible server first asks the server what it serves
+    # and aborts on a mismatch with agent.expected_model. Never for --dry-run (backend "fake").
+    server_info = None
+    if cfg.agent.backend == "openai_compatible":
+        try:
+            server_info = preflight(cfg.agent, transport=transport)
+        except BackendError as e:
+            raise SystemExit(f"preflight failed: {e}") from e
+        print(f"preflight ok: server serves {server_info['models_endpoint']}")
     if args.task:
         if args.seed is None:
             ap.error("--task needs --seed")
-        work = [(cfg, args.task, args.seed, args.out)]
+        work = [(cfg, args.task, args.seed, args.out, server_info, transport)]
     else:
         if not args.seeds:
             ap.error("--tasks needs --seeds")
         paths = sorted(p for pat in args.tasks for p in glob.glob(pat))
-        work = [(cfg, p, s, args.out) for p in paths for s in parse_seeds(args.seeds)]
+        work = [
+            (cfg, p, s, args.out, server_info, transport)
+            for p in paths
+            for s in parse_seeds(args.seeds)
+        ]
 
     if args.jobs > 1 and len(work) > 1:
         with ProcessPoolExecutor(max_workers=args.jobs) as pool:

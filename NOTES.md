@@ -426,4 +426,11 @@ and 0 conservative on the WC selection set).
 - Backends use only the standard library (no openai/anthropic SDK added); `agent` config section is
   in the hash and in config.json; runner `python -m bench.agent.run`; usage summary per batch.
 - The shared "llm-qwen36" setup found read-only in /etc/bash.bashrc is llama.cpp's llama-server (not
-  vLLM) on port 8001, --jinja, ctx 200000; see the comments of configs/agent_vllm_example.yaml.
+  vLLM) on port 8001, --jinja, ctx 200000; see the comments of configs/agent_llamacpp_example.yaml.
+
+## Before real runs (2026-10-08)
+- Example config renamed to `configs/agent_llamacpp_example.yaml` (server is llama.cpp llama-server).
+- Preflight for OpenAI-compatible real runs (`/v1/models`, `/props`; abort on mismatch with
+  `agent.expected_model`; recorded in config.json); sampling top_p/top_k/min_p; `model_description`.
+- model_C parameter names are mapped at the tool layer (c1 -> w_EE, ... , theta_i -> thresh_I).
+- Pilot commands in `scripts/pilot.sh`, NOT executed; pilot output goes to runs/pilot/ (excluded).

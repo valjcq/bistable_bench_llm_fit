@@ -20,6 +20,7 @@ caught; an unexpected exception is a bug and propagates.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict
 from typing import Any
 
@@ -64,6 +65,11 @@ class Episode:
             config, task, event_hook=logger.env_hook if logger else None
         )
         self.runs = RunRegistry(self.env, episode_seed=seed)
+        # Agent-facing parameter names (see PUBLIC_PARAM_NAMES): the mapping lives ONLY here, at
+        # the tool layer. Everything the agent sends is translated to the internal names before
+        # it reaches the environment, everything it receives is translated back.
+        self._to_pub = self.env.param_names
+        self._to_int = {v: k for k, v in self._to_pub.items()}
         self.submitted = False
         self.final_metric: dict[str, Any] | None = None  # checker metric of submitted params
         # {"claim", "params", "verdict", "justification", "n_tool_calls"}; None until submit
@@ -86,9 +92,10 @@ class Episode:
             "type": "object",
             "description": "Values of the free parameters (see get_task), within their bounds.",
             "properties": {
-                p.name: {"type": "number", "minimum": p.low, "maximum": p.high} for p in free
+                self._pub(p.name): {"type": "number", "minimum": p.low, "maximum": p.high}
+                for p in free
             },
-            "required": [p.name for p in free],
+            "required": [self._pub(p.name) for p in free],
             "additionalProperties": False,
         }
         n_pops = len(self.env.describe()["populations"])
@@ -258,7 +265,7 @@ class Episode:
             except BudgetExhausted as e:
                 out = _error("budget_exhausted", str(e))
             except ValueError as e:  # raised by the environment BEFORE charging anything
-                out, invalid = _error("invalid_argument", str(e)), True
+                out, invalid = _error("invalid_argument", self._public_text(str(e))), True
             finally:
                 if self.logger is not None:
                     self.logger.end_call()  # (also on a bug: the next line must not be a child)
@@ -276,6 +283,25 @@ class Episode:
             )
         return out
 
+    # ---- agent-facing parameter names -------------------------------------------------
+
+    def _pub(self, name: str) -> str:
+        return self._to_pub.get(name, name)
+
+    def _pub_params(self, params: dict[str, Any] | None) -> dict[str, Any] | None:
+        return None if params is None else {self._pub(k): v for k, v in params.items()}
+
+    def _int_params(self, params: dict[str, Any] | None) -> dict[str, Any] | None:
+        return None if params is None else {self._to_int.get(k, k): v for k, v in params.items()}
+
+    def _public_text(self, text: str) -> str:
+        """An environment error message with internal parameter names replaced by public ones."""
+        if not self._to_pub:
+            return text
+        names = sorted(self._to_pub, key=len, reverse=True)
+        pattern = re.compile(r"\b(" + "|".join(map(re.escape, names)) + r")\b")
+        return pattern.sub(lambda m: self._to_pub[m.group(1)], text)
+
     # ---- the tools (arguments already validated against the schema) ------------------
 
     def _tool_get_task(self) -> dict[str, Any]:
@@ -283,6 +309,8 @@ class Episode:
         d.pop("config_hash")
         d["budget"] = {"total": d["budget"], "remaining": self.env.budget_remaining}
         d["max_tool_calls"] = self.max_tool_calls
+        for p in d["free_parameters"]:
+            p["name"] = self._pub(p["name"])
         return d
 
     def _tool_list_optimizers(self) -> dict[str, Any]:
@@ -301,7 +329,9 @@ class Episode:
         if self.logger is not None:
             self.logger.role = "optimizer"
         try:
-            r = self.runs.run(name, objective, sim_budget, hyperparameters, init, seed)
+            r = self.runs.run(
+                name, objective, sim_budget, hyperparameters, self._int_params(init), seed
+            )
         finally:
             if self.logger is not None:
                 self.logger.role = self.role
@@ -309,7 +339,7 @@ class Episode:
             "run_id": r.run_id,
             "optimizer": r.optimizer,
             "best_score": r.best_score,
-            "best_params": r.best_params,
+            "best_params": self._pub_params(r.best_params),
             "evals_used": r.evals_used,
             "converged": r.converged,
             "stopped_reason": r.stopped_reason,
@@ -318,13 +348,14 @@ class Episode:
 
     def _tool_get_run_results(self, run_id: str, fields: list[str] | None = None) -> dict:
         d = self.runs.get(run_id).to_dict()
+        d["best_params"] = self._pub_params(d["best_params"])
         return {"run_id": run_id, **{f: d[f] for f in (fields or DEFAULT_RUN_FIELDS)}}
 
     def _tool_check_bistability(self, params: dict[str, float]) -> dict[str, Any]:
-        return self.env.check(params).to_dict()
+        return self.env.check(self._int_params(params)).to_dict()
 
     def _tool_simulate(self, params: dict, init_state: list[float], T: float) -> dict:
-        return asdict(self.env.simulate(params, init_state, T))
+        return asdict(self.env.simulate(self._int_params(params), init_state, T))
 
     def _tool_get_budget(self) -> dict[str, int]:
         e = self.env
@@ -347,7 +378,9 @@ class Episode:
         against the task's hidden `feasible` flag (bench.honesty)."""
         if outcome == "solution" and params is None:
             raise ValueError("params is required when outcome is 'solution'")
-        metric = None if params is None else asdict(self.env.final_report(params))
+        metric = None
+        if params is not None:
+            metric = asdict(self.env.final_report(self._int_params(params)))
         self.submitted = True
         self.final_metric = metric
         self.final_record = {

@@ -1,0 +1,40 @@
+# EXAMPLE ONLY, fully commented out: nothing in this repository loads it, depends on the server it
+# describes, or calls it, and no test does. To use it, copy it to another file and uncomment the
+# `agent:` section.
+#
+# The shared "llm-qwen36" setup (read from /etc/bash.bashrc; nothing was started, stopped or
+# queried) is llama.cpp's llama-server. It exposes an OpenAI-compatible API and gets native tool
+# calling through --jinja (the model's chat template). It is launched by a shell alias in the
+# background:
+#     /opt/shared/llama.cpp/build/bin/llama-server
+#       --model /opt/shared/models/qwen3.6-35b/Qwen3.6-35B-A3B-UD-IQ4_XS.gguf
+#       --port 8001 --ctx-size 200000 --n-gpu-layers 999 --host 0.0.0.0 --jinja
+#       --temp 0.6 --top-p 0.95 --top-k 20 --min-p 0.0 --cache-reuse 256 &
+#   - host/port: 0.0.0.0:8001, base URL http://localhost:8001/v1
+#   - model file: Qwen3.6-35B-A3B-UD-IQ4_XS.gguf (quantization UD-IQ4_XS). With no --alias the
+#     server names the model after the file/path; the runner's preflight reads /v1/models and
+#     /props and checks it against expected_model before any episode.
+#   - context: --ctx-size 200000 in total (llama-server may divide it between parallel slots; the
+#     preflight records n_ctx per slot and the number of slots in each run's config.json)
+#   - tool calling: --jinja, no --tool-call-parser flag (that is vLLM); the parser follows the chat
+#     template. No --api-key flag is visible, so no key is needed (not verified).
+#   - thinking is on (this alias does not disable it): replies may carry reasoning text, which the
+#     backend logs. Sampling follows the model's recommendation for thinking mode, not greedy.
+#
+# agent:
+#   backend: openai_compatible
+#   base_url: http://localhost:8001/v1
+#   model: Qwen3.6-35B-A3B-UD-IQ4_XS.gguf          # sent in requests; llama-server ignores it
+#   expected_model: Qwen3.6-35B-A3B-UD-IQ4_XS.gguf # the preflight aborts if the server reports another
+#   model_description: "Qwen3.6-35B-A3B, GGUF quantization UD-IQ4_XS, llama.cpp llama-server, thinking mode"
+#   # api_key_env: LLM_API_KEY                      # NAME of an environment variable; omit for no key
+#   temperature: 0.6
+#   top_p: 0.95
+#   top_k: 20
+#   min_p: 0.0
+#   max_tokens: 4096
+#   max_turns: 60
+#   max_tool_calls: 40
+#   prompt: system_v1
+#   max_retries: 5
+#   timeout_s: 600

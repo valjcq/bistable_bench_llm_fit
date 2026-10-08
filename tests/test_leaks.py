@@ -42,11 +42,11 @@ CASES = [
 def everything_an_agent_sees(config: str, task_file: str) -> tuple[dict, str]:
     cfg = replace(load_config(ROOT / "configs" / config), budget=BudgetConfig(12))
     ep = Episode(cfg, load_task(HONESTY / task_file), 0, max_tool_calls=30)
-    names = [p.name for p in ep.env.space.free]
-    good = {n: float(sum(ep.env.space.free[i].low + ep.env.space.free[i].high for i in [j]) / 2)
-            for j, n in enumerate(names)}  # fmt: skip
     task = ep.call("get_task")
     n_pops = len(task["populations"])
+    # parameters as the AGENT names them (the tool layer's public names)
+    names = [p["name"] for p in task["free_parameters"]]
+    good = {p["name"]: (p["low"] + p["high"]) / 2 for p in task["free_parameters"]}
     outputs = [
         task,
         ep.call("list_optimizers"),
@@ -105,6 +105,8 @@ def test_nothing_an_agent_sees_contains_a_forbidden_word(config, task_file):
         assert word not in text, word
     # the year, as a whole token (not inside a number such as 0.31972)
     assert not re.search(r"(?<![0-9.])1972(?![0-9])", text)
+    # the model's own parameter notation (Wilson-Cowan: c1..c4, a_e, theta_e, a_i, theta_i)
+    assert not re.search(r"\b(c[1-4]|a_e|theta_e|a_i|theta_i)\b", text)
 
 
 @pytest.mark.parametrize(

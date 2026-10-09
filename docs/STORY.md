@@ -1,6 +1,6 @@
-# Bistable Fit Bench — Design Journey
- 
-As of 2026-10-09 · Val
+# Bistable Fit Bench: the design journey
+
+As of 2026-10-09, by Valentin Jacquin. Written from my own narrative notes and checked against the repository; where the two differed, the repository won (see [the list at the end](#differences-between-this-narrative-and-the-repository)). Numbers link to their source in [results.md](results.md).
  
 We set out to test whether an LLM agent helps fit multistable neural models. The work showed that a well-designed objective, not the agent, does the solving; the agent study became a test of whether it picks the right optimizer and whether it invents solutions.
  
@@ -50,10 +50,12 @@ Expert v2 was written down and committed before any run. It scores the fixed-poi
  
 | Toy, budget 200 (25 runs each) | CMA-ES | TPE |
 | --- | --- | --- |
-| Naive score (B) | 18 | 12 |
+| Naive score (B) | 17 | 12 |
 | Expert v1 (C) | 11 | 2 |
-| Expert v2 (C) | 24 | 17 |
+| Expert v2 (C2) | 24 | 18 |
 | Random search (A) | 0 | — |
+
+Source: `results/phase0/toy_grid_sr_summary.csv`, with the final submission rule. Before that rule the same grid gave B-cma 18 and expert v2 with TPE 17 (`toy_grid_summary.csv`, `toy_grid_v2_summary.csv`); the other cells are identical.
  
 These are development numbers: v2 was designed after seeing these tasks. v1 was then removed from the code, kept at the tag `phase0-expert-v1`, and its replacement documented in a decision record. All baselines also adopted one submission rule: check the top 3 candidates before submitting.
  
@@ -131,9 +133,9 @@ The agent study became two questions: does it pick the best setup, and does it i
 | --- | --- | --- |
 | Keep the environment separate from any agent | The agent must not be able to influence the referee | Budgeted interface only; leak tests |
 | Structured weights, Dale's law, partial observation | Matches published models; free weights make placing states trivial | Linear fixed-point condition |
-| Exclude saturated targets when planting | Saturated states match almost any strong weights | 95% of toy high states were above 0.96 before the window |
+| Exclude saturated targets when planting | Saturated states match almost any strong weights | 5%–95% planting window ([environment.md](environment.md) section 5) |
 | Write the protocol before every test | Results must not shape the rules | Commits dated before runs; rule changes labelled |
-| Replace expert v1 with v2 | v1 rewarded saddles near targets and had a cliff at the tolerance | Classified v1 failures; toy 11/25 → 24/25 with CMA-ES |
+| Replace expert v1 with v2 | v1 rewarded saddles near targets and had a cliff at the tolerance | Classified v1 failures ([phase0.md](phase0.md)); toy 11/25 → 24/25 with CMA-ES |
 | Same submission rule for all baselines | A baseline that never checks its answer is a weak comparison | Top-3 check; 2 of 175 runs changed |
 | Wilson–Cowan from a model card | Code is adapted to the paper's equations, never the paper's numbers to our code | Paper's qualitative results reproduced |
 | Measure selection headroom before building the agent | An LLM is only warranted if no fixed setup wins everywhere | Gap 0 on toy and ei_2pop |
@@ -145,8 +147,19 @@ The agent study became two questions: does it pick the best setup, and does it i
  
 The current conclusion: on these tasks, an LLM agent adds no solving power over a fixed expert pipeline, and it brings a non-zero risk of reporting false solutions.
  
-- [ ] Classify the 8 claimed solutions on impossible tasks from the logs: saw the checker fail and claimed anyway, never checked, or other. Then read all 8.
+- [ ] Read all 8 claimed solutions on impossible tasks myself. A post-hoc classification exists (a: checked and failed, b: never checked, c: other; tally 1/7/0, plus hand notes on the justifications), labelled descriptive and small-sample in [agent_study.md](agent_study.md); no conclusion is drawn from it.
 - [ ] Decide whether to run one closed API model on the same tasks and seeds (main prompt, 54 episodes, about 2–3 million input tokens).
-- [ ] Add the agent section to the results document and update the README.
+- [x] The agent section is in the results documents ([results.md](results.md), [agent_results.md](agent_results.md)) and the README.
 - [ ] Possible later extensions, not planned: Wilson–Cowan hysteresis tasks, a 3-population tristable model with partial observation.
-Limitations to state in the write-up: one local quantized model, 9 impossible episodes per cell, sampling at temperature 0.6, toy and Wilson–Cowan only.
+Limitations: one local quantized model, 9 impossible episodes per cell, sampling at temperature 0.6, toy and Wilson–Cowan only. Full list in [agent_study.md](agent_study.md).
+
+## Differences between this narrative and the repository
+
+Where the notes and the repo differed, I used the repo.
+
+1. **Toy table.** The notes had B-cma 18 and expert v2 + TPE 17 (before the submission rule). The table above uses the final rule (17 and 18); the pre-rule figures are in the footnote.
+2. **"95% of toy high states were above 0.96 before the window".** I found no source for this in the repo, so it is removed.
+3. **Open points 1 and 3** were out of date: the post-hoc classification and the agent section in the results documents already existed.
+4. **Tag `phase0-expert-v1`.** The notes say v1 "was kept at the tag". The tag is the last commit that still contains `expert_v1` (`c87d08f`); it also contains the ei_2pop test protocol and its budget-selection runs, so it is not a snapshot of Phase 0 alone.
+5. **Pipeline count.** "8 of 36 vs 0": the pipeline was run once per set, so its reference is 0 of 18 episodes shown against both prompts.
+6. **Limitations.** The notes have no numbered section 9; the limitations are the last line of the notes, expanded in [agent_study.md](agent_study.md).

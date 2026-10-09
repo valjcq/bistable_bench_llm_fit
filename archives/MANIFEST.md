@@ -1,6 +1,6 @@
 # Archives (pointers and checksums only)
 
-The raw run directories of the agent evaluation (full JSONL logs, raw model responses, tool messages) are not in this repository (about 63 MB for the agent runs; `runs/` is gitignored). Each tarball holds the run directories of one batch, named `<condition>_<set>`. Verify a downloaded tarball with `sha256sum <file>`. Whether and where they are published is undecided.
+The raw run directories of the agent evaluation (full JSONL logs, raw model responses, tool messages) are not in this repository (about 63 MB for the agent runs; `runs/` is gitignored). Each tarball holds the run directories of one batch, named `<condition>_<set>`. Verify a downloaded tarball with `sha256sum <file>`. They are not published for now.
 
 | archive | sha256 |
 |---|---|

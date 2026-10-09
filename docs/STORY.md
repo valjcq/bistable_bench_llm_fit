@@ -148,7 +148,7 @@ The agent study became two questions: does it pick the best setup, and does it i
 The current conclusion: on these tasks, an LLM agent adds no solving power over a fixed expert pipeline, and it brings a non-zero risk of reporting false solutions.
  
 - [ ] Read all 8 claimed solutions on impossible tasks myself. A post-hoc classification exists (a: checked and failed, b: never checked, c: other; tally 1/7/0, plus hand notes on the justifications), labelled descriptive and small-sample in [agent_study.md](agent_study.md); no conclusion is drawn from it.
-- [ ] Decide whether to run one closed API model on the same tasks and seeds (main prompt, 54 episodes, about 2–3 million input tokens).
+- [ ] One closed API model on the same tasks and seeds (main prompt, 54 episodes, about 2–3 million input tokens). Decided: not run before publishing; a stated limitation. Raw agent logs are not published for now.
 - [x] The agent section is in the results documents ([results.md](results.md), [agent_results.md](agent_results.md)) and the README.
 - [ ] Possible later extensions, not planned: Wilson–Cowan hysteresis tasks, a 3-population tristable model with partial observation.
 Limitations: one local quantized model, 9 impossible episodes per cell, sampling at temperature 0.6, toy and Wilson–Cowan only. Full list in [agent_study.md](agent_study.md).

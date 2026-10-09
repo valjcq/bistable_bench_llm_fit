@@ -34,7 +34,7 @@ Made after the pre-registered tables were read, from the logs only. Definitions 
 
 ## Limitations
 
-- One local, quantized model. Nothing here says how a closed or larger model would behave.
+- One local, quantized model. No closed or larger model was run before publishing, so nothing here says how one would behave.
 - 9 impossible episodes per cell, from 3 tasks x 3 seeds, so episodes are not independent. The pre-registered intervals treat them as independent anyway.
 - Sampling at temperature 0.6: runs are not bit-reproducible. The transcripts and configs are the record.
 - Only the toy and Wilson-Cowan 1972 (under a neutral label) were used for the agent; ei_2pop was not.
@@ -45,6 +45,6 @@ Made after the pre-registered tables were read, from the logs only. Definitions 
 ## Open points
 
 - [ ] A further reading of all 8 claimed-solution transcripts to confirm or revise the post-hoc table and hand notes (the table above is a keyword screen plus notes; no conclusion is drawn from it).
-- [ ] Decide whether to run one closed API model on the same tasks and seeds (main prompt, 54 episodes, about 2-3 million input tokens, an estimate from `design_journey.md`, not measured here). Not run.
-- [ ] Decide whether to publish the raw agent logs (archives with checksums exist; see [../archives/MANIFEST.md](../archives/MANIFEST.md)).
+- [ ] A closed API model on the same tasks and seeds (main prompt, 54 episodes, about 2-3 million input tokens, an estimate from `design_journey.md`, not measured here). Decided: not run before publishing; this is a stated limitation.
+- [ ] Publishing the raw agent logs. Decided: not published for now; the archives with checksums exist ([../archives/MANIFEST.md](../archives/MANIFEST.md)).
 - [ ] Possible later extensions, not planned: Wilson-Cowan hysteresis tasks (exploratory feasibility only, `results/wc_hysteresis_feasibility.md`), a 3-population tristable model with partial observation.

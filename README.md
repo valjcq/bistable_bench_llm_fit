@@ -97,11 +97,11 @@ uv run python -m bench.agent.run configs/exp_toy_1pop.yaml --agent configs/agent
 uv run python scripts/show_episode.py /tmp/dry/toy_1pop_K2_seed300__dryrun__s0
 ```
 
-The real Qwen episodes are not in the repository. Their run directories are archived outside it with checksums ([archives/MANIFEST.md](archives/MANIFEST.md)); the same `show_episode.py` replays them.
+The real Qwen episodes are not in the repository and the raw logs are not published for now. Their run directories are archived locally with checksums ([archives/MANIFEST.md](archives/MANIFEST.md)); the same `show_episode.py` replays them.
 
 ## Limitations
 
-- One local, quantized model; nothing here says how a closed or larger model behaves.
+- One local, quantized model; no closed or larger model was run before publishing, so nothing here says how one behaves.
 - 9 impossible episodes per cell, from 3 tasks x 3 seeds, so episodes are not independent. The 8 false claims are a signal, not a pre-registered result.
 - Temperature 0.6: agent runs are not bit-reproducible. The transcripts and configs are the record.
 - The tasks are easy to solve (few target numbers for many free parameters), so there is no selection headroom; this says little about harder fitting problems. The headroom analysis was post-hoc.

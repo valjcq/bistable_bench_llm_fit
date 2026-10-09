@@ -2,7 +2,7 @@
 
 An environment and benchmark for fitting multistable neural models, built to test whether an LLM agent adds anything over a fixed expert optimization pipeline.
 
-[![CI](<GITHUB_URL>/actions/workflows/ci.yml/badge.svg)](<GITHUB_URL>/actions/workflows/ci.yml)
+[![CI](https://github.com/valjcq/bistable_bench_llm_fit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/valjcq/bistable_bench_llm_fit/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ## The question and the finding
@@ -131,4 +131,4 @@ Tags: `v0.1-env` (the deterministic environment) and `phase0-expert-v1` (the las
 
 ## Cite and contact
 
-Valentin Jacquin, computational neuroscience graduate working on ML development. Contact: <GITHUB_PROFILE_URL>. Cite with [CITATION.cff](CITATION.cff). Licensed under MIT ([LICENSE](LICENSE)).
+Valentin Jacquin, computational neuroscience graduate working on ML development. Contact: https://github.com/valjcq. Cite with [CITATION.cff](CITATION.cff). Licensed under MIT ([LICENSE](LICENSE)).

@@ -7,7 +7,7 @@ license: MIT
 authors:
   - family-names: Jacquin
     given-names: Valentin
-repository-code: "<GITHUB_URL>"
+repository-code: "https://github.com/valjcq/bistable_bench_llm_fit"
 abstract: >-
   An environment and benchmark for fitting multistable neural models, built to test whether an
   LLM agent adds anything over a fixed expert optimization pipeline.

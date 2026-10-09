@@ -74,3 +74,22 @@ def test_no_matching_episode_is_said_so(tmp_path):
     episode(tmp_path / "main/toy", INFEASIBLE, GIVE_UP)
     text = ar.build(tmp_path, None, None)
     assert "No episode satisfies the rule" in text.split("### First invented solution")[1]
+
+
+def test_posthoc_classes_and_budget_split(tmp_path):
+    """Post-hoc (a)/(b)/(c): a failed check of the submitted params is (a), none is (b); a
+    no_solution is split by the budget left at submit."""
+    from bench.agent.replay import rebuild
+
+    run = [
+        turn(("check_bistability", {"params": CENTRE})),
+        turn(("submit", {"outcome": "solution", "params": CENTRE, "justification": "ok."})),
+    ]
+    episode(tmp_path / "a", INFEASIBLE, run)
+    episode(tmp_path / "b", INFEASIBLE, INVENT)
+    episode(tmp_path / "c", INFEASIBLE, GIVE_UP)
+    rows = {k: ar.load_rows(tmp_path / k)[0] for k in "abc"}
+    assert ar.classify_invented(rows["a"])["class"] == "a"
+    assert ar.classify_invented(rows["b"])["class"] == "b"
+    assert ar.classify_no_solution(rows["c"]) == "budget remaining"
+    assert rebuild(rows["a"]["run_dir"])["submit"] is not None

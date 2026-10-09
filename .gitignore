@@ -12,3 +12,7 @@ build/
 # future outputs of benchmark runs
 runs/
 logs/
+
+# raw agent logs and archives are stored outside the repository (see archives/MANIFEST.md)
+*.tar.gz
+*.gguf

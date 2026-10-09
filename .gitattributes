@@ -1,0 +1,5 @@
+# Generated or bulk files: keep them out of language statistics and diffs.
+uv.lock linguist-generated
+results/**/*.csv linguist-generated -diff
+*.tar.gz binary
+*.gguf binary

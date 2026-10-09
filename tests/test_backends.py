@@ -23,6 +23,7 @@ from bench.agent.backends import (
     to_openai_tools,
 )
 from bench.agent.loop import run_agent
+from bench.agent.replay import rebuild
 from bench.agent.run import main as run_main
 from bench.agent.run import resolve_agent, run_one, usage_summary
 from bench.config import AgentConfig, BudgetConfig, config_from_dict, load_config
@@ -618,3 +619,58 @@ def test_dry_run_never_uses_the_network_or_the_preflight(tmp_path):
     args = runner_args(tmp_path, "--dry-run")
     run_main(args, transport=NoNetwork())  # any transport use would raise
     assert (tmp_path / "runs/toy_1pop_K2_seed302__dryrun__s0/result.json").exists()
+
+
+# ---- the log of a real-path run is complete and the episode can be rebuilt from it -------------
+
+
+def test_real_run_log_holds_everything_and_rebuilds_the_wire_messages(tmp_path):
+    odd_args = '{ "outcome" :"no_solution",  "justification": "x" }'  # spacing must survive
+    t = MockTransport(
+        openai_reply("hello", [("get_task", "{}")], reasoning="thinking one"),
+        openai_reply("", [("get_budget", "{}")], reasoning="thinking two"),
+        openai_reply("bye", [("submit", odd_args)]),
+        gets=llama_server(),
+    )
+    run_main(runner_args(tmp_path), transport=t)
+    run_dir = tmp_path / "runs/toy_1pop_K2_seed302__m-1__s0"
+    ep = rebuild(run_dir)
+    assert ep["exact"] and len(ep["turns"]) == 3
+
+    # what was sent once per run: sampling actually sent, tools as sent, endpoint, system prompt
+    tpl = ep["setup"]["request_template"]
+    assert tpl["endpoint"] == f"{BASE}/chat/completions"
+    sent_fixed = {k: v for k, v in t.requests[0]["payload"].items() if k != "messages"}
+    assert tpl["fixed"] == sent_fixed
+    assert (tpl["fixed"]["top_k"], tpl["fixed"]["top_p"], tpl["fixed"]["min_p"]) == (20, 0.95, 0.0)
+    assert ep["setup"]["tool_specs"] == [
+        {k: v for k, v in s.items()} for s in ep["setup"]["tool_specs"]
+    ]
+    assert tpl["fixed"]["tools"] == to_openai_tools(ep["setup"]["tool_specs"])
+
+    # per turn: the rebuilt messages ARE the messages of the request, exactly
+    for turn, request in zip(ep["turns"], t.requests, strict=True):
+        assert to_openai_messages(turn["messages_sent"]) == request["payload"]["messages"]
+    first = ep["turns"][0]
+    assert (first["reasoning"], first["text"], first["finish_reason"], first["attempts"]) == (
+        "thinking one", "hello", "tool_calls", 1,
+    )  # fmt: skip
+    assert first["tokens"] == {"input": 11, "output": 7} and first["latency"] is not None
+    assert first["raw_response"]["choices"][0]["message"]["reasoning_content"] == "thinking one"
+    assert ep["turns"][2]["calls"][0]["raw_arguments"] == odd_args  # the provider's raw string
+    # the tool result as the model received it: the text of the next request's tool message
+    received = t.requests[1]["payload"]["messages"][-1]
+    assert received["role"] == "tool" and received["content"] == first["calls"][0]["result"]
+    assert ep["submit"]["arguments"]["outcome"] == "no_solution"
+
+
+def test_agent_visible_lines_are_never_truncated_but_internal_events_are(tmp_path):
+    from bench.logging import JsonlLogger, read_events
+
+    big = {"history": ["x" * 100] * 500}  # about 50k characters
+    with JsonlLogger(tmp_path / "e.jsonl", 0, "h", max_output_chars=1000) as lg:
+        lg.log("agent", "get_run_results", {}, big, 0, keep_full=True)
+        lg.log("optimizer", "evaluate", {}, big, 0)
+    full, internal = read_events(tmp_path / "e.jsonl")
+    assert full["output"] == big and full["output_sha256"] is None
+    assert internal["output"] is None and len(internal["output_sha256"]) == 64

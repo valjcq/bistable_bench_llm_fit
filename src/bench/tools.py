@@ -280,6 +280,7 @@ class Episode:
                 self.env.budget_remaining,
                 invalid=invalid,
                 call_id=call_id,
+                keep_full=True,  # what the agent received is never truncated in the log
             )
         return out
 

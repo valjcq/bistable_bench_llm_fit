@@ -19,7 +19,10 @@ A turn without tool calls is answered with a fixed neutral user message and stil
 Logging (same JSONL as the tool calls): `episode_start` (the prompts), one `assistant_turn` line per
 turn (role "assistant": text, tool calls with their ids; tokens and latency as given by the backend,
 null for a fake one; `output.call_ids` links to the tool-call lines of Episode.call, written just
-before it), `nudge` for the fixed reply, `episode_end` (stopped_reason) and, on an unexpected
+before it; `raw_response` is the provider's complete response and `tool_messages` the exact tool
+messages the model receives next, so the conversation can be rebuilt from the log alone, see
+bench.agent.replay), `nudge` for the fixed reply, `episode_end` (stopped_reason) and, on an
+unexpected
 exception, `harness_error`. A run with a harness error is EXCLUDED from statistics and counted
 separately (bench.honesty).
 """
@@ -56,6 +59,7 @@ class AssistantTurn:
     latency: float | None = None  # seconds for the whole request incl. retries; None for a fake
     reasoning: str | None = None  # the model's reasoning text, if the API returns it
     meta: dict[str, Any] = field(default_factory=dict)  # e.g. {"finish_reason", "attempts"}
+    raw: Any = None  # the provider's complete response body (raw arguments strings included)
 
 
 class Backend(Protocol):
@@ -107,6 +111,7 @@ def run_agent(
         if logger is not None:
             logger.log(role, name, arguments, output, episode.env.budget_remaining, **kw)
 
+    template = getattr(backend, "request_template", None)
     log(
         "harness",
         "episode_start",
@@ -115,25 +120,29 @@ def run_agent(
             "system_prompt": system_prompt,
             "first_message": first_message,
             "tools": [t["name"] for t in tools],
+            "tool_specs": tools,  # the provider-neutral specs, exactly as handed to the backend
+            # what every request shares as sent: endpoint, model, sampling, tools in wire format
+            "request_template": template(tools) if template else None,
         },
+        keep_full=True,
     )
     reason, n_turns, error = "max_turns", 0, None
     try:
         for n_turns in range(1, max_turns + 1):
             turn = backend.generate(messages, tools)
             messages.append(_assistant_message(turn))
-            call_ids = []
+            call_ids, tool_messages = [], []
             for call in turn.tool_calls:
                 result = episode.call(call.name, call.arguments)
                 call_ids.append(episode.last_call_id)
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call.id,
-                        "name": call.name,
-                        "content": json.dumps(result),
-                    }
-                )
+                message = {
+                    "role": "tool",
+                    "tool_call_id": call.id,
+                    "name": call.name,
+                    "content": json.dumps(result),
+                }
+                tool_messages.append(message)  # logged as is: the exact text the model receives
+                messages.append(message)
             log(
                 "assistant",
                 "assistant_turn",
@@ -145,9 +154,16 @@ def run_agent(
                         for c in turn.tool_calls
                     ],
                 },
-                {"call_ids": call_ids, "reasoning": turn.reasoning, "meta": turn.meta},
+                {
+                    "call_ids": call_ids,
+                    "reasoning": turn.reasoning,
+                    "meta": turn.meta,
+                    "raw_response": turn.raw,  # the provider's whole response (raw arguments too)
+                    "tool_messages": tool_messages,  # the tool messages appended after this turn
+                },
                 tokens=turn.tokens,
                 latency=turn.latency,
+                keep_full=True,
             )
             if episode.submitted:
                 reason = "submit"

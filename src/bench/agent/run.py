@@ -22,7 +22,8 @@ import glob
 import hashlib
 import json
 import re
-from concurrent.futures import ProcessPoolExecutor
+import sys
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import Any
@@ -118,6 +119,41 @@ def _job(args: tuple) -> dict[str, Any]:
     return run_one(*args)
 
 
+def run_batch(
+    work: list[tuple], jobs: int, max_consecutive_errors: int
+) -> tuple[list[dict[str, Any]], bool]:
+    """Run the episodes of `work`; returns (rows in work order, stopped early).
+
+    Safety stop: when `max_consecutive_errors` episodes in a row (in completion order) end in a
+    harness error the batch is abandoned: episodes not yet started are not run, the rows of the
+    finished ones are returned. Nothing is retried or changed to make the batch pass.
+    """
+    rows: dict[int, dict[str, Any]] = {}
+    in_a_row, stopped = 0, False
+
+    def note(index: int, row: dict[str, Any]) -> bool:
+        nonlocal in_a_row
+        rows[index] = row
+        in_a_row = in_a_row + 1 if row["harness_error"] else 0
+        return 0 < max_consecutive_errors <= in_a_row
+
+    if jobs > 1 and len(work) > 1:
+        with ProcessPoolExecutor(max_workers=jobs) as pool:
+            futures = {pool.submit(_job, w): i for i, w in enumerate(work)}
+            for future in as_completed(futures):
+                if note(futures[future], future.result()):
+                    stopped = True
+                    for f in futures:
+                        f.cancel()  # episodes already running finish; the rest never start
+                    break
+    else:
+        for i, w in enumerate(work):
+            if note(i, _job(w)):
+                stopped = True
+                break
+    return [rows[i] for i in sorted(rows)], stopped
+
+
 def main(argv: list[str] | None = None, transport: Any = None) -> None:
     """CLI entry. `transport` replaces the HTTP layer (tests only)."""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
@@ -130,6 +166,10 @@ def main(argv: list[str] | None = None, transport: Any = None) -> None:
     ap.add_argument("--budget", type=int, help="override budget.max_evaluations")
     ap.add_argument("--dry-run", action="store_true", help="use the scripted FakeBackend")
     ap.add_argument("--jobs", type=int, default=1, help="parallel episodes (batch)")
+    ap.add_argument(
+        "--max-consecutive-harness-errors", type=int, default=3,
+        help="stop the batch after this many harness errors in a row (0 = never)",
+    )  # fmt: skip
     ap.add_argument("--out", default="runs/agent")
     ap.add_argument("--csv", default=None, help="results CSV (default: <out>/results.csv)")
     args = ap.parse_args(argv)
@@ -161,11 +201,7 @@ def main(argv: list[str] | None = None, transport: Any = None) -> None:
             for s in parse_seeds(args.seeds)
         ]
 
-    if args.jobs > 1 and len(work) > 1:
-        with ProcessPoolExecutor(max_workers=args.jobs) as pool:
-            rows = list(pool.map(_job, work))
-    else:
-        rows = [_job(w) for w in work]
+    rows, stopped = run_batch(work, args.jobs, args.max_consecutive_harness_errors)
 
     csv_path = Path(args.csv or Path(args.out) / "results.csv")
     csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -182,6 +218,13 @@ def main(argv: list[str] | None = None, transport: Any = None) -> None:
     print()
     print(usage)
     print(f"agent: {asdict(cfg.agent)}\nconfig hash: {cfg.hash()}")
+    if stopped:
+        print(
+            f"SAFETY STOP: {args.max_consecutive_harness_errors} harness errors in a row; "
+            f"{len(rows)} of {len(work)} episodes were run",
+            file=sys.stderr,
+        )
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":

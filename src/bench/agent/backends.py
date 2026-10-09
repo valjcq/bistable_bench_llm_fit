@@ -310,23 +310,32 @@ class _Backend:
 class OpenAICompatibleBackend(_Backend):
     """Chat completions with native tool calling (vLLM, llama.cpp, hosted OpenAI-style APIs)."""
 
-    def generate(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
-    ) -> AssistantTurn:
-        payload = {
+    def request_template(self, tools: list[dict[str, Any]]) -> dict[str, Any]:
+        """What every request of the episode has in common, exactly as sent: the endpoint and the
+        `fixed` payload fields (model, tools in the provider's format, the sampling parameters
+        actually sent). generate() builds its payloads from this, so the record cannot drift from
+        what goes over the wire; only `messages` changes between requests."""
+        fixed: dict[str, Any] = {
             "model": self._cfg.model,
-            "messages": to_openai_messages(messages),
             "tools": to_openai_tools(tools),
             "temperature": self._cfg.temperature,
             "max_tokens": self._cfg.max_tokens,
         }
         for name in ("top_p", "top_k", "min_p"):  # optional: sent only when set
             if getattr(self._cfg, name) is not None:
-                payload[name] = getattr(self._cfg, name)
+                fixed[name] = getattr(self._cfg, name)
+        return {"endpoint": f"{(self._cfg.base_url or '').rstrip('/')}/chat/completions",
+                "fixed": fixed}  # fmt: skip
+
+    def generate(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> AssistantTurn:
+        template = self.request_template(tools)
+        payload = {**template["fixed"], "messages": to_openai_messages(messages)}
         headers = {"Content-Type": "application/json"}
         if self._key:
             headers["Authorization"] = f"Bearer {self._key}"
-        url = f"{(self._cfg.base_url or '').rstrip('/')}/chat/completions"
+        url = template["endpoint"]
         start = time.perf_counter()
         body, attempts = self._post(url, headers, payload)
         latency = time.perf_counter() - start
@@ -351,31 +360,37 @@ class OpenAICompatibleBackend(_Backend):
             latency=latency,
             reasoning=msg.get("reasoning_content") or msg.get("reasoning"),
             meta={"finish_reason": choice.get("finish_reason"), "attempts": attempts},
+            raw=body,
         )
 
 
 class AnthropicBackend(_Backend):
     """The Messages API with native tool use."""
 
-    def generate(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
-    ) -> AssistantTurn:
-        system, conv = to_anthropic_messages(messages)
-        payload = {
+    def request_template(self, tools: list[dict[str, Any]]) -> dict[str, Any]:
+        """The fields every request of the episode shares, exactly as sent (see the OpenAI one)."""
+        fixed: dict[str, Any] = {
             "model": self._cfg.model,
             "max_tokens": self._cfg.max_tokens,
             "temperature": self._cfg.temperature,
-            "system": system,
-            "messages": conv,
             "tools": to_anthropic_tools(tools),
         }
         for name in ("top_p", "top_k"):  # optional: sent only when set (min_p does not exist here)
             if getattr(self._cfg, name) is not None:
-                payload[name] = getattr(self._cfg, name)
+                fixed[name] = getattr(self._cfg, name)
+        return {"endpoint": f"{(self._cfg.base_url or ANTHROPIC_URL).rstrip('/')}/v1/messages",
+                "fixed": fixed}  # fmt: skip
+
+    def generate(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> AssistantTurn:
+        system, conv = to_anthropic_messages(messages)
+        template = self.request_template(tools)
+        payload = {**template["fixed"], "system": system, "messages": conv}
         headers = {"Content-Type": "application/json", "anthropic-version": ANTHROPIC_VERSION}
         if self._key:
             headers["x-api-key"] = self._key
-        url = f"{(self._cfg.base_url or ANTHROPIC_URL).rstrip('/')}/v1/messages"
+        url = template["endpoint"]
         start = time.perf_counter()
         body, attempts = self._post(url, headers, payload)
         latency = time.perf_counter() - start
@@ -398,6 +413,7 @@ class AnthropicBackend(_Backend):
             latency=latency,
             reasoning=thinking or None,
             meta={"finish_reason": body.get("stop_reason"), "attempts": attempts},
+            raw=body,
         )
 
 

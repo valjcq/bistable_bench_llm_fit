@@ -1,0 +1,17 @@
+agent:
+  backend: openai_compatible
+  base_url: http://localhost:8001/v1
+  model: Qwen3.6-35B-A3B-UD-IQ4_XS.gguf          # sent in requests; llama-server ignores it
+  expected_model: Qwen3.6-35B-A3B-UD-IQ4_XS.gguf # the preflight aborts if the server reports another
+  model_description: "Qwen3.6-35B-A3B, GGUF quantization UD-IQ4_XS, llama.cpp llama-server, thinking mode"
+  # api_key_env: LLM_API_KEY                      # NAME of an environment variable; omit for no key
+  temperature: 0.6
+  top_p: 0.95
+  top_k: 20
+  min_p: 0.0
+  max_tokens: 4096
+  max_turns: 60
+  max_tool_calls: 40
+  prompt: system_v1
+  max_retries: 5
+  timeout_s: 600

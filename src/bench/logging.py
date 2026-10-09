@@ -12,7 +12,10 @@ environment and optimizer events it triggers), so a log can be grouped by call.
 `name` is the environment method (evaluate, check, simulate, final_report, budget_exhausted)
 or, from checkpoint 7 on, a tool name. `output` is the JSON result; if its JSON text is longer
 than `max_output_chars` it is replaced by `output_sha256` (and `output` is null), so the log
-stays small but a changed result is still detectable. `tokens` and `latency` are null until an
+stays small but a changed result is still detectable. That limit applies to the internal events
+only (environment and optimizer evaluations): lines logged with `keep_full=True` (the tool calls
+and assistant turns, i.e. everything the agent sees or says) are never truncated or hashed.
+`tokens` and `latency` are null until an
 LLM is involved. `budget_after` is the number of evaluations still available after the call.
 
 Two runs are "the same" when their lines are equal after dropping the fields in VOLATILE_FIELDS
@@ -92,9 +95,10 @@ class JsonlLogger:
         call_id: int | None = None,
         tokens: Any = None,  # an int, or e.g. {"input": ..., "output": ...} from an LLM backend
         latency: float | None = None,
+        keep_full: bool = False,  # agent-visible content: no size limit, never hashed
     ) -> None:
         text = _canonical(output)
-        too_big = len(text) > self.max_output_chars
+        too_big = not keep_full and len(text) > self.max_output_chars
         line = {
             "timestamp": time.time(),
             "step": self.step,

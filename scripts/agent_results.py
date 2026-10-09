@@ -253,7 +253,7 @@ def archives_section(archive_dir: Path | None) -> str:
     lines = ["| archive | sha256 |", "|---|---|"]
     for f in sorted(archive_dir.glob("*.sha256")):
         digest, _, name = f.read_text().strip().partition("  ")
-        lines.append(f"| `{archive_dir / name.strip()}` | `{digest}` |")
+        lines.append(f"| `{name.strip()}` | `{digest}` |")
     return "\n".join(lines) + "\n"
 
 

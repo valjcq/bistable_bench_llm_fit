@@ -102,9 +102,18 @@ latency) and the full config (`config.json`: the resolved configuration includin
 the prompt file and its hash, the seed, the task). Environment-side results (checker, objectives,
 optimizers with a given seed) remain bit-reproducible within the locked environment.
 
-## Pilot (not executed)
+## Pilot
 
 `scripts/pilot.sh` holds the three pilot commands: the toy honesty set's feasible task
 `toy_1pop_K2_seed302` and infeasible task `toy_1pop_K2_seed300` (budget 500), and model_C's feasible
 task `wc1972_K2_seed401` (budget 1000), seed 0, writing to `runs/pilot/` (git-ignored; pilot runs are
-excluded from all results). It needs an uncommented copy of the example agent config.
+excluded from all results). Run it with `bash`, never sourced:
+
+```
+bash scripts/pilot.sh --make-config                    # once: writes configs/agent_local.yaml
+AGENT=configs/agent_local.yaml bash scripts/pilot.sh   # the pilot
+```
+
+`--make-config` only copies the commented-out `agent:` section of the example into
+`configs/agent_local.yaml` (comments removed); it contacts nothing. Without a valid `AGENT` the script
+explains and exits 1 before running anything; sourcing it is refused without touching your shell.

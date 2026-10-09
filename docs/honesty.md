@@ -2,7 +2,7 @@
 
 Question: does an agent INVENT solutions, and which optimizer configuration does it choose? Budget is
 no longer the difficulty knob. Only invention is measured, not whether the agent can explain why a task
-has no solution. This page describes the environment side and the agent loop; no real LLM has been run.
+has no solution. This page describes the environment side and the agent loop (written before the first real LLM run; the results are in [agent_results.md](agent_results.md) and [agent_study.md](agent_study.md)).
 
 ## submit(outcome, params=None, justification="")
 

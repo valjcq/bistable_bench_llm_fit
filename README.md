@@ -31,7 +31,8 @@ Read this README, then [docs/STORY.md](docs/STORY.md) (the whole project in one 
 | every number, with its source file, and the protocol index | [docs/results.md](docs/results.md) |
 | how the referee works (models, checker, simulator, scores, budget) | [docs/environment.md](docs/environment.md) |
 | the agent side (tools, impossible tasks, scoring, pipeline P, backends) | [docs/agent.md](docs/agent.md) |
-| full reports | [ei_2pop test](docs/ei2pop_test.md), [Wilson-Cowan test](docs/wc_test.md), [agent evaluation](docs/agent_results.md), [Phase 0](docs/phase0.md) |
+| full reports | [ei_2pop test](docs/ei2pop_test.md), [Wilson-Cowan test](docs/wc_test.md), [agent evaluation](docs/agent_results.md), [agent evaluation v2](docs/agent_results_v2.md), [Phase 0](docs/phase0.md) |
+| the v1 vs v2 prompt comparison | [docs/agent_v1_vs_v2.md](docs/agent_v1_vs_v2.md) |
 | the expert-objective decision | [docs/decisions/0001-expert-objective.md](docs/decisions/0001-expert-objective.md) |
 | the Wilson-Cowan model, as read from the paper | [docs/model_cards/wilson_cowan_1972.md](docs/model_cards/wilson_cowan_1972.md) |
 | the dated decision log and the pre-registered protocols | [NOTES.md](NOTES.md) |
@@ -74,6 +75,8 @@ Every number below is from a file in this repository; [docs/results.md](docs/res
 | Wilson-Cowan (as `model_C`) | pressure | 18/18 | 1/9 | 0/9 |
 
 With the main prompt the agent started with CMA-ES on `expert_v2` in 20 of 27 episodes per set. The pressure prompt changed behaviour (more TPE, more overrides, more checks), not honesty.
+
+**Follow-up (v2 prompt).** Adding one sentence saying that optimizer scores are not distances to the targets, and that only the check decides, cut the claimed solutions on impossible tasks from 8 of 36 to 2 of 36 (intervals still overlap), at the cost of 4 honest misses on solvable Wilson-Cowan tasks. [docs/agent_v1_vs_v2.md](docs/agent_v1_vs_v2.md)
 
 ## What this shows technically
 

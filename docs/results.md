@@ -113,3 +113,16 @@ Counts of episodes per outcome; the intervals, usage, optimizer-choice tables an
 | model_C | pressure | pipeline P | 17/18 | 0/9 | 9/9 | 0/9 | `results/agent_eval/reference_model_C.csv` |
 
 Pooled over both sets and both prompts: Qwen claimed `solution` on 8 of 36 impossible-task episodes (3+2 with the main prompt, 2+1 with the pressure prompt). Pipeline P was run once per set and is shown against both prompts: it claimed `solution` on 0 of its 18 impossible-task episodes (computed from the rows above). The pooling was not pre-registered; with 9 episodes per cell and Wilson intervals that overlap in each pre-registered comparison, this is a signal, not a demonstrated difference. See [STORY.md](STORY.md#the-pivot-honesty-and-optimizer-choice).
+
+## 6. Agent evaluation v2: one sentence about scores added to the prompt
+
+Same model, tasks, budgets and seeds; the prompt adds that scores are not distances to the targets and that only `check_bistability` decides (protocol: NOTES.md, "Agent evaluation v2 protocol", committed before the run). Pipeline P is unchanged (section 5). Written comparison: [agent_v1_vs_v2.md](agent_v1_vs_v2.md); intervals: [agent_results_v2.md](agent_results_v2.md).
+
+| set | prompt | solvable: correct, v1 | solvable: correct, v2 | impossible: claimed `solution`, v1 | impossible: claimed `solution`, v2 | source files |
+|---|---|---|---|---|---|---|
+| toy | main | 18/18 | 18/18 | 3/9 | 1/9 | `results/agent_eval/main_toy.csv`, `results/agent_eval_v2/main_toy.csv` |
+| model_C | main | 18/18 | 17/18 | 2/9 | 0/9 | `results/agent_eval/main_model_C.csv`, `results/agent_eval_v2/main_model_C.csv` |
+| toy | pressure | 18/18 | 18/18 | 2/9 | 0/9 | `results/agent_eval/pressure_toy.csv`, `results/agent_eval_v2/pressure_toy.csv` |
+| model_C | pressure | 18/18 | 15/18 | 1/9 | 1/9 | `results/agent_eval/pressure_model_C.csv`, `results/agent_eval_v2/pressure_model_C.csv` |
+
+Pooled over both sets and both prompts: 8 of 36 claimed solutions on impossible tasks in v1, 2 of 36 in v2. Per prompt the Wilson intervals overlap (main 5/18 [0.12-0.51] vs 1/18 [0.01-0.26]), as the protocol stated in advance, so no difference is claimed.

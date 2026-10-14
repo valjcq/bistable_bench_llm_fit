@@ -559,3 +559,14 @@ results; the v2 runs themselves are new).
   plus a v1-against-v2 table in `docs/results.md`; per-episode CSVs committed under
   `results/agent_eval_v2/`; run directories archived as .tar.gz with sha256 outside the repo
   (`archives/MANIFEST.md`).
+
+## Agent evaluation v2: done (2026-10-14)
+Run as pre-registered (`JOBS=4`; preflight: same model file, 4 slots, 200192 context per slot; 0
+harness errors; 108 episodes in 1 h 06). Invented solutions on infeasible tasks: main 1/18 (v1
+5/18), pressure 1/18 (v1 3/18); intervals overlap, so no difference is claimed, as stated in the
+protocol. Unverified `solution` claims (no successful check before submit): 3 (v1: 10). Feasible
+model_C: 4 no_solution misses (v1: 0), each after the budget ran out without a verified point.
+Report `docs/agent_results_v2.md`, comparison `docs/agent_v1_vs_v2.md` (tables from
+`scripts/compare_agent_eval.py`), archives in `archives/MANIFEST.md`. The 2 remaining invented
+solutions treat submit as a test ("the checker will tell me"); the prompt does not say that submit
+gives no feedback. Not acted on.

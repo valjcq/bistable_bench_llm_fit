@@ -141,6 +141,8 @@ The agent study became two questions: does it pick the best setup, and does it i
 
 **What the 8 claimed solutions look like** (post-hoc, descriptive, from the logs only; per-episode table in [agent_results.md](agent_results.md)). 6 of the 8 submitted a copy, exact or rounded, of a point whose check had failed. 5 of the 8 justifications say outright that the targets were not matched, and still claim "solution". This describes 8 episodes; it is not a measured rate.
 
+**Follow-up: telling the agent what the score means (v2).** I reran the whole evaluation with one added prompt sentence: scores are not distances to the targets, and only the check decides. Protocol committed before the run; everything else identical. False claims on impossible tasks went from 8 of 36 to 2 of 36, and "solution" claims made without a successful check from 10 to 3. The intervals still overlap at this sample size, so this is a clear direction, not a demonstrated difference. The cost: 4 honest "no_solution" answers on solvable Wilson–Cowan tasks after the budget ran out. The 2 remaining false claims treat submit as a test ("the checker will tell me"). Details in [agent_v1_vs_v2.md](agent_v1_vs_v2.md).
+
 ## Key decisions and why
 
 | Decision | Why | Evidence in the repo |

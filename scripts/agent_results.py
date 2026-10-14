@@ -2,7 +2,7 @@
 
     uv run python scripts/agent_results.py [--runs runs/agent_eval] [--out docs/agent_results.md]
                                            [--archive-dir DIR] [--notes docs/agent_results_notes.md]
-                                           [--prompt system_v1] [--reference-runs DIR] [--protocol P]
+                                           [--prompt NAME] [--reference-runs DIR] [--protocol P]
 
 The evaluation protocol (NOTES.md, "Agent evaluation protocol") fixes what is reported; this script
 only computes it, from the `result.json` of every episode directory, so the document can be

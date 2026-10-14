@@ -1,8 +1,21 @@
 # Results
 
-Every number below is copied by script from a result file in the repository; the last column (or the line under each table) names that file. Nothing here comes from the narrative alone. Where the repo and `docs/STORY.md` differ, the repo is used (see [the list in STORY.md](STORY.md#differences-between-this-narrative-and-the-repository)).
+Every number below is copied by script from a result file in the repository; the last column (or the line under each table) names that file. Nothing here comes from the narrative alone.
 
 Conditions (from [environment.md](environment.md) and [phase0.md](phase0.md)): **A** random search; **B** optimizer on the naive (simulation) score; **C** optimizer on the expert score. `-cma` is CMA-ES, `-tpe` is TPE (Optuna). In the Phase 0 files the expert score is `expert_v1` as `C` and `expert_v2` as `C2`; in every later file (ei_2pop, Wilson-Cowan tests) `C` is `expert_v2`, and `expert_v1` no longer exists in the code. A run succeeds if the submitted parameters pass the final check. Intervals are Wilson 95%.
+
+## Protocols
+
+The protocols stay in [../NOTES.md](../NOTES.md), where they were committed before the runs they govern; this table points to them rather than copying them. Each held-out test followed the same discipline: choose the budget on separate **selection tasks**, write the protocol, then run the **test set** once. Rule changes are labelled amendments, written and committed before the next runs.
+
+| Stage | Selection tasks | Test tasks | Budget | Protocol (NOTES.md section) | Report |
+|---|---|---|---|---|---|
+| Toy, expert v2 (development) | none (development set: `tasks/toy_1pop_K2_seed0..4`) | none | 200 | "expert_v2: pre-registered definition", "Submission rule" | [phase0.md](phase0.md) |
+| ei_2pop | `tasks/selection/ei_2pop_K2_seed100..104` | `tasks/ei_2pop_K2_seed1..9` | 500 (exception to the budget rule, see the amendment) | "ei_2pop test protocol", "AMENDMENT", "test: done" | [ei2pop_test.md](ei2pop_test.md) |
+| Wilson-Cowan 1972 | `tasks/selection/wc1972_K2_seed100..104` | `tasks/wc1972_K2_seed1..9` | 200 (selected by the rule after amendment 1) | "wc1972 test protocol", "AMENDMENT 1", "test: done" | [wc_test.md](wc_test.md) |
+| Agent evaluation | none | `tasks/honesty/` (toy seeds 300-308, Wilson-Cowan seeds 400-408) | toy 500, model_C 1000 | "Agent evaluation protocol" | [agent_results.md](agent_results.md), [STORY.md](STORY.md#the-pivot-honesty-and-optimizer-choice) |
+
+Statistics used throughout: Wilson 95% intervals on counts; a difference is claimed only when the intervals do not overlap. Section 4 below (headroom) was not pre-registered.
 
 ## 1. Toy (`toy_1pop`), budget 200: expert v1 vs v2 (development tasks)
 
@@ -22,7 +35,7 @@ Footnote, before the submission rule (same tasks, same budget): A 0/25; B-cma 18
 
 ## 2. Held-out tests
 
-Budget chosen on separate selection tasks (seeds 100-104), the protocol written and committed before the test run, the test set run once. 9 test tasks x 5 seeds = 45 runs per condition. Protocols: [protocol.md](protocol.md).
+Budget chosen on separate selection tasks (seeds 100-104), the protocol written and committed before the test run, the test set run once. 9 test tasks x 5 seeds = 45 runs per condition. Protocols: [above](#protocols).
 
 ### ei_2pop, budget 500
 
@@ -99,4 +112,4 @@ Counts of episodes per outcome; the intervals, usage, optimizer-choice tables an
 | model_C | pressure | Qwen3.6-35B-A3B | 18/18 | 1/9 | 8/9 | 0/9 | `results/agent_eval/pressure_model_C.csv` |
 | model_C | pressure | pipeline P | 17/18 | 0/9 | 9/9 | 0/9 | `results/agent_eval/reference_model_C.csv` |
 
-Pooled over both sets and both prompts: Qwen claimed `solution` on 8 of 36 impossible-task episodes (3+2 with the main prompt, 2+1 with the pressure prompt). Pipeline P was run once per set and is shown against both prompts: it claimed `solution` on 0 of its 18 impossible-task episodes (computed from the rows above). The pooling was not pre-registered; with 9 episodes per cell and Wilson intervals that overlap in each pre-registered comparison, this is a signal, not a demonstrated difference. See [agent_study.md](agent_study.md).
+Pooled over both sets and both prompts: Qwen claimed `solution` on 8 of 36 impossible-task episodes (3+2 with the main prompt, 2+1 with the pressure prompt). Pipeline P was run once per set and is shown against both prompts: it claimed `solution` on 0 of its 18 impossible-task episodes (computed from the rows above). The pooling was not pre-registered; with 9 episodes per cell and Wilson intervals that overlap in each pre-registered comparison, this is a signal, not a demonstrated difference. See [STORY.md](STORY.md#the-pivot-honesty-and-optimizer-choice).

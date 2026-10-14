@@ -16,11 +16,25 @@ On these tasks the agent adds no solving power. One fixed setup (CMA-ES on an ob
 1. **Question.** Can an agent do the inverse problem (target rates in, parameters out) by orchestrating optimizers?
 2. **Referee.** A deterministic environment with an exact fixed-point checker (Jacobian stability), a fixed-step simulator, three kept-apart scores and an evaluation budget. No LLM inside. [docs/environment.md](docs/environment.md)
 3. **Baselines and objective design.** Random search, and CMA-ES / TPE on a naive or an expert score. My first expert score lost to plain simulation; classifying the failed runs found two traps, and the rewritten `expert_v2` was pre-registered before any run. [docs/decisions/0001-expert-objective.md](docs/decisions/0001-expert-objective.md)
-4. **Held-out tests.** An E/I pair (`ei_2pop`) and the Wilson-Cowan 1972 model, with the budget chosen on separate selection tasks and the protocol written before the test run. [docs/protocol.md](docs/protocol.md)
+4. **Held-out tests.** An E/I pair (`ei_2pop`) and the Wilson-Cowan 1972 model, with the budget chosen on separate selection tasks and the protocol written before the test run. [docs/results.md](docs/results.md#protocols)
 5. **Headroom check.** Before building the agent I measured the gap between the best fixed setup and a per-task oracle. It was zero or near zero.
-6. **Pivot to honesty.** The agent study asks instead whether the agent picks the right optimizer and whether it invents solutions on tasks with a proof that no solution exists. [docs/agent_study.md](docs/agent_study.md)
+6. **Pivot to honesty.** The agent study asks instead whether the agent picks the right optimizer and whether it invents solutions on tasks with a proof that no solution exists. [docs/agent.md](docs/agent.md)
 
 The longer version is [docs/STORY.md](docs/STORY.md).
+
+## How to read the docs
+
+Read this README, then [docs/STORY.md](docs/STORY.md) (the whole project in one page: question, environment, baselines, tests, agent study, decisions, limitations). Everything else is reference, to open when you want a detail:
+
+| for | read |
+|---|---|
+| every number, with its source file, and the protocol index | [docs/results.md](docs/results.md) |
+| how the referee works (models, checker, simulator, scores, budget) | [docs/environment.md](docs/environment.md) |
+| the agent side (tools, impossible tasks, scoring, pipeline P, backends) | [docs/agent.md](docs/agent.md) |
+| full reports | [ei_2pop test](docs/ei2pop_test.md), [Wilson-Cowan test](docs/wc_test.md), [agent evaluation](docs/agent_results.md), [Phase 0](docs/phase0.md) |
+| the expert-objective decision | [docs/decisions/0001-expert-objective.md](docs/decisions/0001-expert-objective.md) |
+| the Wilson-Cowan model, as read from the paper | [docs/model_cards/wilson_cowan_1972.md](docs/model_cards/wilson_cowan_1972.md) |
+| the dated decision log and the pre-registered protocols | [NOTES.md](NOTES.md) |
 
 ## Key results
 
@@ -108,11 +122,11 @@ The real Qwen episodes are not in the repository and the raw logs are not publis
 - The toy and Wilson-Cowan are the only models used for the agent.
 - Expert v2 was designed on the toy development tasks; only the ei_2pop and Wilson-Cowan tests are held-out.
 - **The committed task files contain the hidden planted parameters** (and the impossibility flags). They are needed to run the checker. A model trained on this repository could have seen the answers, so new tasks must be generated for any future evaluation.
-- The post-hoc classification of the 8 claimed solutions is descriptive and small-sample ([docs/agent_study.md](docs/agent_study.md)).
+- The post-hoc classification of the 8 claimed solutions is descriptive and small-sample ([docs/STORY.md](docs/STORY.md#the-pivot-honesty-and-optimizer-choice)).
 
 ## How I used AI coding assistants
 
-I built the code with an AI coding assistant (Claude Code) in reviewed checkpoints: each stage was reviewed before the next one, and the review findings are recorded in [NOTES.md](NOTES.md). I can explain and defend each part of the code and the design.
+I built the code with an AI coding assistant (Claude Code) in reviewed checkpoints: each stage was reviewed before the next one, and the review findings are recorded in [NOTES.md](NOTES.md). 
 
 ## Repo map
 
@@ -123,7 +137,7 @@ I built the code with an AI coding assistant (Claude Code) in reviewed checkpoin
 | `configs/`, `prompts/` | experiment and model configs, agent configs, system prompts |
 | `tasks/` | frozen task files (with hidden planted parameters), selection sets and honesty sets |
 | `results/` | small committed result summaries (CSV and markdown) |
-| `docs/` | [STORY](docs/STORY.md), [design decisions](docs/design_decisions.md), [protocols](docs/protocol.md), [results](docs/results.md), [agent study](docs/agent_study.md), [environment](docs/environment.md), [model cards](docs/model_cards/) |
+| `docs/` | the narrative ([STORY](docs/STORY.md)) and the reference pages listed in [How to read the docs](#how-to-read-the-docs) |
 | `archives/` | pointers and checksums for the raw agent logs; no bulk data |
 | `NOTES.md` | the dated decision log and the protocols |
 

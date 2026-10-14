@@ -241,7 +241,7 @@ The centre of the box is monostable: one stable state at (0.5, 0.5). One target 
 - `config.py`: typed config sections, hashes.
 
 **`configs/`**: `toy_1pop.yaml`, `ei_2pop.yaml`, `wc1972.yaml`, `wc1972_k1.yaml`, `wc1972_paper_sets.yaml` (models and parameter sets); `exp_toy_1pop.yaml`, `exp_ei_2pop.yaml` (experiments).
-**`tasks/`**: 5 toy and 10 `ei_2pop` task files at the time of writing; later additions (Wilson-Cowan, selection and honesty sets) are listed in [protocol.md](protocol.md).
+**`tasks/`**: 5 toy and 10 `ei_2pop` task files at the time of writing; later additions (Wilson-Cowan, selection and honesty sets) are listed in [results.md](results.md#protocols).
 **`tests/`**: `conftest.py` (fixtures), `test_model.py`, `test_checker.py`, `test_checker_nd.py`, `test_scoring.py`, `test_budget_env.py`, `test_tasks.py`, `test_config.py`, `test_determinism.py`.
 
 **Not part of the deterministic layer, not covered here:** `src/bench/optimizers/`, `src/bench/optimizer_runs.py` and `tests/test_optimizers.py` (optimizer wrappers that talk to the environment only through its budgeted methods).

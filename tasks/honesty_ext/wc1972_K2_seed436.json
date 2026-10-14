@@ -1,0 +1,26 @@
+{
+  "format_version": 1,
+  "model": "wc1972",
+  "observed": [
+    "E"
+  ],
+  "seed": 436,
+  "K": 2,
+  "targets": [
+    [
+      -0.06376920358492044
+    ],
+    [
+      0.5404539847897758
+    ]
+  ],
+  "planted_params": {},
+  "generation_hash": "ca380c7a72ce8384087f0728b070bc2c9e16dbbc8f81a66f4dd5c298ae086add",
+  "n_attempts": 0,
+  "rejections": {},
+  "inputs": {
+    "P": -0.14795065928301646
+  },
+  "feasible": false,
+  "infeasibility_proof": "wc1972: at a fixed point E = k_e S / (1 + r_e S) with r_e = 1 and S < S_max <= 1, hence E < 1/2 for every parameter set (both k options). The high target is above 0.52 and tol is 0.01, so no state can match it. See bench/infeasible.py."
+}

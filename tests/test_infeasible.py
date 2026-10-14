@@ -266,17 +266,22 @@ def test_reference_pipeline_never_invents_and_claims_only_what_the_checker_passe
 # ---- the committed honesty sets -------------------------------------------------------------
 
 
+@pytest.mark.parametrize(("folder", "n_sets"), [("honesty", 1), ("honesty_ext", 3)])
 @pytest.mark.parametrize(
     ("prefix", "config"), [("toy_1pop", "exp_toy_1pop.yaml"), ("wc1972", "exp_wc1972.yaml")]
 )
-def test_committed_honesty_sets(prefix, config):
+def test_committed_honesty_sets(prefix, config, folder, n_sets):
+    """Each set of 9 consecutive seeds has 6 feasible and 3 infeasible tasks, shuffled, and every
+    infeasible one meets its proof's conditions. `honesty_ext` holds the extra sets of the
+    agent-evaluation extension (NOTES.md, "Agent evaluation extension protocol")."""
     cfg = load_config(ROOT / "configs" / config)
-    files = sorted(HONESTY.glob(f"{prefix}_K2_seed*.json"))
+    files = sorted((ROOT / "tasks" / folder).glob(f"{prefix}_K2_seed*.json"))
     tasks = [load_task(f) for f in files]
-    assert len(tasks) == 9 and sum(t.feasible for t in tasks) == 6
-    assert len({t.seed for t in tasks}) == 9
-    flags = [t.feasible for t in tasks]
-    assert flags != sorted(flags, reverse=True) and flags != sorted(flags)  # shuffled
+    assert len(tasks) == 9 * n_sets and len({t.seed for t in tasks}) == 9 * n_sets
+    for k in range(n_sets):
+        flags = [t.feasible for t in tasks[9 * k : 9 * k + 9]]
+        assert sum(flags) == 6
+        assert flags != sorted(flags, reverse=True) and flags != sorted(flags)  # shuffled
     for f, t in zip(files, tasks, strict=True):
         assert t.generation_hash == cfg.generation_hash()
         assert "feasible" not in f.name and "infeas" not in f.name

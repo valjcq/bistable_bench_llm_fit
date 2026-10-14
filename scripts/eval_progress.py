@@ -10,6 +10,7 @@ estimate: model_C episodes take about twice as long as toy ones, and the slowest
 in no particular order.
 
     uv run python scripts/eval_progress.py [--runs runs/agent_eval_v2] [--total 108] [--watch 60]
+    uv run python scripts/eval_progress.py --runs runs/agent_eval_ext --total 648 --watch 60
 """
 
 from __future__ import annotations
@@ -22,8 +23,13 @@ from pathlib import Path
 
 def report(runs: Path, total: int) -> str:
     """One status line: finished / running / total, elapsed time and the estimated finish."""
-    # agent episodes only: a "reference" folder (pipeline P, no LLM) is not part of the ETA
-    configs = [c for c in runs.glob("*/*/*/config.json") if c.parts[-4] != "reference"]
+    # agent episodes only, at any depth (runs/<prompt>/<set>/... or runs/<version>/<prompt>/...):
+    # pipeline P ("reference", no LLM) and set-aside interrupted batches are not counted
+    configs = [
+        c
+        for c in runs.rglob("config.json")
+        if not {"reference", "_interrupted"} & set(c.relative_to(runs).parts)
+    ]
     if not configs:
         return f"{runs}: no episode has started yet"
     done = sum((c.parent / "result.json").exists() for c in configs)

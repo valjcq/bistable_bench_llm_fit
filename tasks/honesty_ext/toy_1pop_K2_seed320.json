@@ -1,0 +1,23 @@
+{
+  "format_version": 1,
+  "model": "toy_1pop",
+  "observed": [
+    "R"
+  ],
+  "seed": 320,
+  "K": 2,
+  "targets": [
+    [
+      0.13694981316659544
+    ],
+    [
+      0.32598582954706484
+    ]
+  ],
+  "planted_params": {},
+  "generation_hash": "d4147d27d8828dd9dbe690b558b9e47464e736c4a3fbf1c5006f440cac09e486",
+  "n_attempts": 0,
+  "rejections": {},
+  "feasible": false,
+  "infeasibility_proof": "Toy: two targets on the same side of 0.5, each at least tol from 0.5. Fixed points obey w r + I = theta + k logit(r), so two fixed points r1 < r2 force w = k L with L the secant slope of logit; stability w F'(u) < 1 with F' = r (1 - r) / k reads L r (1 - r) < 1 (independent of all parameters). logit is concave below 0.5 and convex above, so for two states on the same side the secant slope exceeds logit' at the inner (below 0.5: the upper) state and the condition fails at one of them. See bench/infeasible.py."
+}

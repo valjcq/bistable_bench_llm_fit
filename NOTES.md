@@ -570,3 +570,41 @@ Report `docs/agent_results_v2.md`, comparison `docs/agent_v1_vs_v2.md` (tables f
 `scripts/compare_agent_eval.py`), archives in `archives/MANIFEST.md`. The 2 remaining invented
 solutions treat submit as a test ("the checker will tell me"); the prompt does not say that submit
 gives no feedback. Not acted on.
+
+## Agent evaluation extension protocol (2026-10-14; written and committed BEFORE any extension run)
+Amends the v2 protocol: the first v2 run could not decide (stated in advance), so this extension
+collects enough NEW data to decide, with a test chosen now.
+- **Question (unchanged)**: does the v2 sentence lower the rate of invented solutions on infeasible
+  tasks?
+- **New tasks, not more seeds**: 3 new honesty sets per model, made by the same construction as
+  `tasks/honesty` (`scripts/make_honesty_sets.py --out tasks/honesty_ext --rng-seed 2027
+  --toy-seeds 310-318 320-328 330-338 --wc-seeds 410-418 420-428 430-438`): 54 tasks, 18
+  infeasible (9 per model, 3 per set), checked by `tests/test_infeasible.py`. The default call
+  still reproduces `tasks/honesty` byte for byte. New tasks rather than more seeds because seeds of
+  one task are not independent, and the first runs had only 6 infeasible tasks.
+- **Runs**: `JOBS=4 bash scripts/run_agent_eval_ext.sh`: v1 (`agent_local*.yaml`) and v2
+  (`agent_local_v2*.yaml`), main and pressure prompts, both models, seeds 0-2, budgets 500 (toy)
+  and 1000 (model_C), 8 batches of 81 episodes (648), plus pipeline P on the new tasks. Same model
+  and server checks as before; JOBS at most the slots the preflight reports. Order: for each prompt
+  and model, the v1 batch then the v2 batch, so server drift affects both alike. An interrupted
+  batch is moved aside, excluded from all results, and run again from the start. Safety stop as in
+  v1. Estimated time about 6.5 h (v2 ran 108 episodes of the same mix in 66 min with JOBS=4).
+- **Primary (decides)**: invented solutions on the 18 new infeasible tasks, v1 against v2, pooled
+  over both prompts and both models (108 episodes per version); one-sided Fisher exact test (v1
+  higher), alpha 0.05. Only the extension's episodes count: the first runs suggested the
+  hypothesis and are not reused for the test. This replaces the non-overlap rule for this
+  question; the Wilson intervals and whether they separate are still reported, as the stricter
+  check.
+- **Power, stated in advance** (simulation, 4000 draws): if the true rates are those of the first
+  runs pooled (0.22 against 0.056), the test detects the drop 97% of the time at 108 per version
+  (non-overlap rule: 80%); if v1's true rate is 0.17, 81% (non-overlap: 46%).
+- **Secondary (descriptive, decides nothing)**: the same comparison per prompt and per model; a
+  task-level sign test (each infeasible task counts once); solving on feasible tasks (correct
+  solutions and no_solution misses, two-sided Fisher); the count over all runs so far, labelled as
+  not a confirmation.
+- **Analysis code**: `scripts/analyze_agent_ext.py`, committed with this protocol and tested on
+  synthetic counts; run as `uv run python scripts/analyze_agent_ext.py --out
+  docs/agent_ext_analysis.md`. Harness errors are excluded and counted, as before.
+- **No change** of prompts, configs, tasks, test or analysis code after the first extension episode.
+- **Report**: the analysis output, an update of `docs/agent_v1_vs_v2.md`, per-episode CSVs under
+  `results/agent_eval_ext/`, run directories archived with sha256 (`archives/MANIFEST.md`).

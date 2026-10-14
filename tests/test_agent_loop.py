@@ -197,8 +197,9 @@ def test_the_backend_sees_provider_neutral_messages_and_the_tool_specs(cfg, tmp_
 # ---- the system prompt --------------------------------------------------------------------------
 
 
-def test_system_prompt_is_neutral():
-    text = load_system_prompt("system_v1").lower()
+@pytest.mark.parametrize("prompt", ["system_v1", "system_v2"])
+def test_system_prompt_is_neutral(prompt):
+    text = load_system_prompt(prompt).lower()
     for word in (
         "cma", "tpe", "random", "naive", "expert", "optimiz", "impossible", "infeasible",
         "may not exist", "might not exist", "honest", "invent", "fabricat", "lie", "should",

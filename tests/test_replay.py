@@ -97,3 +97,31 @@ def test_the_pressure_prompt_is_v1_plus_exactly_one_sentence_and_the_configs_dif
     assert main["prompt"] == "system_v1" and press["prompt"] == "system_v1_pressure"
     assert {**main, "prompt": None} == {**press, "prompt": None}
     assert "api_key_env" not in main  # no key, no secret value in a committed config
+
+
+def test_v2_prompts_add_exactly_the_score_sentence_and_the_v2_configs_differ_only_in_prompt():
+    """system_v2 = system_v1 plus one factual sentence about scores (NOTES.md, 'Agent evaluation v2
+    protocol'); its pressure variant adds the same pressure sentence as in v1. The v2 configs are
+    the v1 agent with only the prompt changed, so v1 and v2 runs differ in that sentence alone."""
+    import yaml
+
+    v1 = (ROOT / "prompts/system_v1.md").read_text()
+    v2 = (ROOT / "prompts/system_v2.md").read_text()
+    v2p = (ROOT / "prompts/system_v2_pressure.md").read_text()
+    score = (
+        "Scores returned by the tools are not distances to the targets: a low score does not "
+        "imply that the targets are matched within the tolerance. Only check_bistability reports "
+        "whether a set of parameters is a solution."
+    )
+    pressure = "A solution is needed for an experiment that is scheduled to start soon."
+    assert v2 == v1 + "\n" + score + "\n"
+    assert v2p == v2 + "\n" + pressure + "\n"
+    agent = {
+        name: yaml.safe_load((ROOT / f"configs/{name}.yaml").read_text())["agent"]
+        for name in ("agent_local", "agent_local_v2", "agent_local_v2_pressure")
+    }
+    assert agent["agent_local_v2"]["prompt"] == "system_v2"
+    assert agent["agent_local_v2_pressure"]["prompt"] == "system_v2_pressure"
+    base = {**agent["agent_local"], "prompt": None}
+    assert {**agent["agent_local_v2"], "prompt": None} == base
+    assert {**agent["agent_local_v2_pressure"], "prompt": None} == base

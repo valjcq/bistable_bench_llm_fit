@@ -1,7 +1,7 @@
 # Notes: decision log
 
 Internal log of design decisions and caveats (the explanation of the environment is in
-[docs/environment.md](docs/environment.md)).
+[docs/environment.md](environment.md)).
 
 ## Status
 All four checkpoints are implemented. Things to keep in mind when building optimizers/agent:
@@ -608,3 +608,114 @@ collects enough NEW data to decide, with a test chosen now.
 - **No change** of prompts, configs, tasks, test or analysis code after the first extension episode.
 - **Report**: the analysis output, an update of `docs/agent_v1_vs_v2.md`, per-episode CSVs under
   `results/agent_eval_ext/`, run directories archived with sha256 (`archives/MANIFEST.md`).
+
+## Next step, not started: can the agent design the loss? (2026-10-15; no code, no run)
+Written while the agent evaluation extension was running; it changed nothing in that run.
+Decision of the same day: the project is not redirected. It is settled and released as it is,
+and this section records the next study as future work (README, "Next steps").
+
+**Train of thought.**
+1. In my thesis, no optimizer I tried reached the target rates and kept the bistability at the
+   same time. What worked was designing a loss that scores both constraints.
+2. This project reproduced that. The optimizers are generic (CMA-ES and TPE through Optuna,
+   random search): they only follow the loss they are given. With the optimizer fixed, changing
+   the loss took Wilson-Cowan from 12/45 (naive) to 28/45 (expert_v2). On the toy, expert_v1 lost
+   to naive (11 vs 17 of 25) until two traps were diagnosed and fixed (expert_v2, 24/25).
+3. The agent only chose from a menu: optimizer, one of two losses I wrote (naive, expert_v2),
+   hyperparameters, budget split. expert_v2 was in the menu, so the hard part was done before
+   the agent started. The zero or small selection headroom says the same thing.
+4. So the agent study tested the technician's part (pick, run, check), not the scientist's
+   (see why a loss fails, design a better one). The second is what I did by hand, and it is
+   what would make an agent useful for this kind of fit.
+5. Next question: given only a generic loss, can an LLM agent design a loss that solves these
+   tasks, and how does that loss compare with losses from the literature and with mine?
+6. I do not know the standard ways to fit bistable networks, so the baselines must come from
+   the literature, not from me. A literature search comes first (brief:
+   [docs/loss_design_search.md](loss_design_search.md)). expert_v2 may itself be a known
+   construction (the residual looks like the "speed" minimised to find fixed points of RNNs, the
+   stability term like a spectral-abscissa penalty); the search should say so if it is.
+
+Carried over unchanged: the environment, the checker as the only judge, the budget, the tasks
+and the impossible tasks, logging, and writing the protocol before any run. The honesty result
+stands on its own, and matters more once the agent scores its own loss.
+
+**Plan, if the study is taken up** (each step reviewed before the next).
+1. The extension is finished and reported first (done before release).
+2. Literature search ([docs/loss_design_search.md](loss_design_search.md)), written up as
+   `docs/loss_baselines.md`: each method, its paper, what it optimises, and whether it fits our
+   budgeted one-call-one-evaluation interface. Claims checked against the papers themselves.
+3. Pick 2-3 literature losses as baselines, with naive and expert_v2 kept as references.
+   Implement them as objectives with the same tests as expert_v2 (zero at the planted solution,
+   positive at a known unstable point, no jump where the checker's verdict flips). Run them with
+   fixed CMA-ES on the selection sets only.
+4. Check that the loss matters on the tasks used. The new study needs a gap between the naive
+   loss and the best one: Wilson-Cowan at budget 200 has one (12 vs 28 of 45); toy and ei_2pop
+   probably do not. If the gap is too small, harder tasks first (3 populations with partial
+   observation, hysteresis; see the exploratory note above).
+5. Agent interface: a tool to submit a loss as Python code, run in a sandbox with a fixed API
+   (model equations, Jacobian, simulator), a time cap, deterministic. expert_v2 removed from the
+   agent's menu, naive kept. To decide before building: what one evaluation of a custom loss
+   costs if it simulates; the loss may not call the checker (the checker stays budgeted and
+   separate); leak tests extended to the new tool and its error messages.
+6. Two measurements, so loss quality is separate from orchestration: (a) the full episode (the
+   agent writes a loss, runs optimizers, submits); (b) the agent's final loss extracted and run
+   offline under the fixed pipeline (CMA-ES, same budgets and seeds) on the test tasks, next to
+   the baselines on equal terms.
+7. Protocol committed before any run: tasks, budgets, primary outcome (success of agent-written
+   losses under the fixed pipeline against naive and the best literature loss), test, power.
+   Impossible tasks stay in the set.
+
+**Open risks.** Running model-written code needs a real sandbox. A loss that is just a 0/1
+verdict is allowed and should score poorly. A written loss close to expert_v2 is not evidence of
+a leak if expert_v2 turns out to be a standard construction (step 2 settles this).
+
+## Agent evaluation extension: done (2026-10-15)
+Run as pre-registered (`JOBS=4`, 8 batches of 81 episodes plus pipeline P). Interrupted batches
+were moved to `runs/agent_eval_ext/_interrupted/` and rerun from the start, as the protocol says;
+they are excluded from all results. 1 harness error (v1, main, model_C), excluded. Analysis run
+unchanged: `uv run python scripts/analyze_agent_ext.py --out docs/agent_ext_analysis.md`.
+- **Primary: no difference shown.** Invented solutions on the 18 new infeasible tasks: v1 19/107,
+  v2 17/108, one-sided Fisher p = 0.42; Wilson intervals overlap. The first v2 run's drop (8 to 2
+  of 36) did not replicate.
+- Secondary (descriptive): per prompt main 9/53 vs 12/54, pressure 10/54 vs 5/54; per model toy
+  9/54 vs 11/54, model_C 10/53 vs 6/54; task-level sign test p = 0.75. Solving: toy 103 vs 107 of
+  108, model_C 102 vs 93 of 108 (two-sided p = 0.064). Pipeline P: 106/108 solvable, 0/54 claims.
+- Reported in `docs/agent_ext_analysis.md`, `docs/agent_v1_vs_v2.md` (Extension section),
+  `docs/results.md` section 7, README and STORY.
+- **Damaged log:** `runs/agent_eval_ext/v1/pressure/model_C/wc1972_K2_seed415__*__s1/events.jsonl`
+  holds about 30 KB of NUL bytes in the middle (result.json intact; the episode is counted from
+  its result and its submit line, which both parse). Part of that transcript is lost; record it
+  in `archives/MANIFEST.md` when the extension runs are archived.
+- Still to do from the protocol's report list: archive the run directories with sha256
+  (`archives/MANIFEST.md`) and commit the per-episode CSVs.
+
+## Audits of 2026-10-15 (post-hoc checks of existing results; no result file changed)
+Recomputed from raw run directories and frozen task files only (scripts kept outside the repo).
+- **Wilson-Cowan held-out test (budget 200).** All 225 runs re-derived: submitted params equal
+  the top-3 rule's choice, the checker (tol 0.01) reproduces every final verdict and every
+  submission check, every run used exactly 200 evaluations (197 optimizer + 3 checks), all
+  conditions share one config, the 9 test tasks and seeds 0-4, the task files predate the runs
+  and their planted params pass the checker (no infeasible task). Counts confirmed: A 5, B-cma 12,
+  B-tpe 14, C-cma 28, C-tpe 23 of 45. 30 reruns (B-cma, C-cma on seeds 2, 5, 8) were bit-identical.
+  Two wording problems found: (1) "C-cma best or tied everywhere" is false on the test set: C-tpe
+  beats it on seed3 (5 vs 4) and seed5 (4 vs 1; B-tpe 2); test-set headroom 0.089 plain, 0.067
+  conservative (the headroom file used the selection set, without TPE). (2) "28 vs 12" is not a
+  claimed difference under the protocol (bootstrap intervals overlap), and the best naive
+  condition is B-tpe (14). README and STORY corrected.
+- **Why the pipeline solves 62% here and 98% in the agent study.** The 98% (141/144) pools toy
+  (72/72, budget 500) and Wilson-Cowan (69/72, budget 1000) on the honesty tasks. Pipeline P is
+  C-cma through the tool layer with budget - 1 optimizer evaluations and a top-1 check (its first
+  197 CMA evaluations equal C-cma's, 45/45). Grid on Wilson-Cowan, each setup on each task set:
+
+  | | test tasks, 200 | test tasks, 1000 | honesty tasks, 200 | honesty tasks, 1000 |
+  |---|---|---|---|---|
+  | C-cma (top-3) | 28/45 | 45/45 | 38/72 | 71/72 |
+  | pipeline P (top-1) | 26/45 | 45/45 | 32/72 | 69/72 |
+
+  The budget explains the gap; the honesty tasks are not easier; top-1 vs top-3 costs a few runs.
+  The two numbers must not be quoted side by side without the budgets. README updated.
+- **The 46 invented solutions** (all runs, all prompt versions), read from the logs: all came
+  after at least one check, none of which had passed; 23 resubmitted a rejected point; 44 came
+  with the budget spent. Justifications, one reader's classification: about 22 admit the targets
+  were not matched, about 8 lean on a score or the exhausted budget, 10 are empty, 1 states a
+  match its own check refuted, the rest are vague.

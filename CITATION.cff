@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this benchmark, please cite it as below."
 title: "Bistable Fit Bench"
 type: software
-version: 0.1.0
+version: 1.0.0
 date-released: "2026-10-16"
 license: MIT
 authors:

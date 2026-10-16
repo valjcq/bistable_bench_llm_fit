@@ -1,6 +1,6 @@
 # Wilson-Cowan (wc1972) held-out test
 
-Protocol: [NOTES.md](../NOTES.md), "wc1972 test protocol" and its AMENDMENT 1, both committed
+Protocol: [NOTES.md](NOTES.md), "wc1972 test protocol" and its AMENDMENT 1, both committed
 before the runs (protocol `2834c14`, amendment `d44e816`); the budget came out of the mechanical
 rule on the selection set only (NOTES.md, "budget selection after amendment 1": **200**). Objective:
 `expert_v2` (condition C). Nothing was changed after seeing these results. Data:

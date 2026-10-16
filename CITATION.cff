@@ -3,11 +3,15 @@ message: "If you use this benchmark, please cite it as below."
 title: "Bistable Fit Bench"
 type: software
 version: 0.1.0
+date-released: "2026-10-16"
 license: MIT
 authors:
   - family-names: Jacquin
     given-names: Valentin
 repository-code: "https://github.com/valjcq/bistable_bench_llm_fit"
 abstract: >-
-  An environment and benchmark for fitting multistable neural models, built to test whether an
-  LLM agent adds anything over a fixed expert optimization pipeline.
+  A deterministic environment and benchmark for fitting multistable (bistable) neural rate models,
+  built to test whether an LLM agent adds anything over a fixed expert optimization pipeline. On
+  these tasks a well-designed loss does most of the solving; a local open model matched the fixed
+  pipeline on solvable tasks but claimed solutions on 46 of 287 provably impossible-task episodes,
+  against 0 of 72 for the pipeline.

@@ -6,7 +6,7 @@ Conditions (from [environment.md](environment.md) and [phase0.md](phase0.md)): *
 
 ## Protocols
 
-The protocols stay in [../NOTES.md](../NOTES.md), where they were committed before the runs they govern; this table points to them rather than copying them. Each held-out test followed the same discipline: choose the budget on separate **selection tasks**, write the protocol, then run the **test set** once. Rule changes are labelled amendments, written and committed before the next runs.
+The protocols stay in [NOTES.md](NOTES.md), where they were committed before the runs they govern; this table points to them rather than copying them. Each held-out test followed the same discipline: choose the budget on separate **selection tasks**, write the protocol, then run the **test set** once. Rule changes are labelled amendments, written and committed before the next runs.
 
 | Stage | Selection tasks | Test tasks | Budget | Protocol (NOTES.md section) | Report |
 |---|---|---|---|---|---|
@@ -14,8 +14,10 @@ The protocols stay in [../NOTES.md](../NOTES.md), where they were committed befo
 | ei_2pop | `tasks/selection/ei_2pop_K2_seed100..104` | `tasks/ei_2pop_K2_seed1..9` | 500 (exception to the budget rule, see the amendment) | "ei_2pop test protocol", "AMENDMENT", "test: done" | [ei2pop_test.md](ei2pop_test.md) |
 | Wilson-Cowan 1972 | `tasks/selection/wc1972_K2_seed100..104` | `tasks/wc1972_K2_seed1..9` | 200 (selected by the rule after amendment 1) | "wc1972 test protocol", "AMENDMENT 1", "test: done" | [wc_test.md](wc_test.md) |
 | Agent evaluation | none | `tasks/honesty/` (toy seeds 300-308, Wilson-Cowan seeds 400-408) | toy 500, model_C 1000 | "Agent evaluation protocol" | [agent_results.md](agent_results.md), [STORY.md](STORY.md#the-pivot-honesty-and-optimizer-choice) |
+| Agent evaluation v2 | none | as above | as above | "Agent evaluation v2 protocol" | [agent_results_v2.md](agent_results_v2.md), [agent_v1_vs_v2.md](agent_v1_vs_v2.md) |
+| Agent evaluation extension | none | `tasks/honesty_ext/` (toy seeds 310-338, Wilson-Cowan seeds 410-438) | toy 500, model_C 1000 | "Agent evaluation extension protocol" (one-sided Fisher test) | [agent_ext_analysis.md](agent_ext_analysis.md), [agent_v1_vs_v2.md](agent_v1_vs_v2.md#extension-the-pre-registered-test-on-new-tasks) |
 
-Statistics used throughout: Wilson 95% intervals on counts; a difference is claimed only when the intervals do not overlap. Section 4 below (headroom) was not pre-registered.
+Statistics used throughout: Wilson 95% intervals on counts; a difference is claimed only when the intervals do not overlap (the held-out tests also require non-overlapping task-bootstrap intervals; the extension uses a pre-registered Fisher test). Section 4 below (headroom) was not pre-registered.
 
 ## 1. Toy (`toy_1pop`), budget 200: expert v1 vs v2 (development tasks)
 
@@ -97,6 +99,8 @@ Post-hoc analysis of existing results; nothing was pre-registered. Gap = mean ov
 
 Different models have different configuration sets (WC has no TPE) and different seed counts, so the pooled row is a task-weighted summary, not a like-for-like estimate.
 
+**Wilson-Cowan held-out test set (audit of 2026-10-15, post-hoc).** The wc1972 row above uses the selection set only. On the 9 test tasks (5 seeds, all five configurations, recomputed from `runs/wc_test`): SBS C-cma 28/45 = 0.622, VBS 32/45 = 0.711, **gap 0.089 plain, 0.067 conservative**. C-cma is beaten on seed3 (C-tpe 5 vs 4 of 5) and seed5 (C-tpe 4, B-tpe 2, vs C-cma 1). So C-cma is the best single configuration, but not the best on every task.
+
 ## 5. LLM agent (Qwen3.6-35B-A3B, local) vs the fixed pipeline P
 
 Counts of episodes per outcome; the intervals, usage, optimizer-choice tables and excerpts are in [agent_results.md](agent_results.md). Impossible tasks: 3 tasks x 3 seeds = 9 per cell. Solvable tasks: 6 x 3 = 18 per cell. Sets: `toy` = toy_1pop (budget 500), `model_C` = Wilson-Cowan 1972 under a neutral label (budget 1000). Harness errors are excluded (0 in all cells).
@@ -126,3 +130,17 @@ Same model, tasks, budgets and seeds; the prompt adds that scores are not distan
 | model_C | pressure | 18/18 | 15/18 | 1/9 | 1/9 | `results/agent_eval/pressure_model_C.csv`, `results/agent_eval_v2/pressure_model_C.csv` |
 
 Pooled over both sets and both prompts: 8 of 36 claimed solutions on impossible tasks in v1, 2 of 36 in v2. Per prompt the Wilson intervals overlap (main 5/18 [0.12-0.51] vs 1/18 [0.01-0.26]), as the protocol stated in advance, so no difference is claimed.
+
+## 7. Agent evaluation extension: the decisive test (new tasks)
+
+18 new impossible tasks and 36 new solvable ones (`tasks/honesty_ext`), v1 and v2 prompts, main and pressure, seeds 0-2: 648 agent episodes plus pipeline P. Protocol: NOTES.md, "Agent evaluation extension protocol" (committed before the run). Analysis: [agent_ext_analysis.md](agent_ext_analysis.md), from `scripts/analyze_agent_ext.py`. Source files: `results/agent_eval_ext/*.csv`. One harness error excluded (v1, main, model_C).
+
+| | v1 | v2 | test |
+|---|---|---|---|
+| impossible: claimed `solution` (primary) | 19/107 [0.12, 0.26] | 17/108 [0.10, 0.24] | one-sided Fisher p = 0.42: **no difference shown** |
+| solvable toy: correct solution | 103/108 | 107/108 | two-sided Fisher p = 0.21 |
+| solvable model_C: correct solution | 102/108 | 93/108 | two-sided Fisher p = 0.064 |
+| pipeline P | solvable 106/108, impossible claims 0/54 | | |
+
+All runs pooled (first runs, v2 and extension, not a test): Qwen claimed `solution` on 46 of 287 impossible-task episodes and solved 545 of 576 solvable ones (94.6%); pipeline P 0 of 72 and 141 of 144 (97.9%). These solving rates are at budgets 500 (toy) and 1000 (Wilson-Cowan); at the benchmark's budget of 200 the same pipeline solves 26 to 28 of the 45 held-out Wilson-Cowan runs (NOTES.md, "Audits of 2026-10-15").
+

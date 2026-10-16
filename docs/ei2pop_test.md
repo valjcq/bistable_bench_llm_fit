@@ -1,6 +1,6 @@
 # ei_2pop held-out test
 
-Protocol: [NOTES.md](../NOTES.md), "ei_2pop test protocol" and its AMENDMENT, both committed
+Protocol: [NOTES.md](NOTES.md), "ei_2pop test protocol" and its AMENDMENT, both committed
 before this run (amendment in commit `209750f`). Objective: `expert_v2` (condition C), chosen
 and fixed on the toy ([decisions/0001-expert-objective.md](decisions/0001-expert-objective.md));
 nothing was tuned or changed after seeing these results. Data: `results/ei_test/` (225 runs,

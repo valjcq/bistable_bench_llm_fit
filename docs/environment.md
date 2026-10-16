@@ -2,7 +2,7 @@
 
 ## 1. What this is
 
-The benchmark asks: *can an LLM agent autonomously fit multistable neural rate models by orchestrating numerical optimizers through tool calls?* This page describes only one layer of the repository: the **deterministic environment** under that question. It is made of the models, the referee that decides whether parameters work, the scores, the evaluation budget and the tasks. The environment contains no LLM and no optimizer. That separation matters: whatever searches for parameters can only talk to the environment through three budgeted calls, so it cannot change the referee, the targets or the budget. The optimizer wrappers, the future agent and the experimental design are outside this layer and are not covered here. Internal design decisions live in [NOTES.md](../NOTES.md); this page explains the ideas and the structure of the environment.
+The benchmark asks: *can an LLM agent autonomously fit multistable neural rate models by orchestrating numerical optimizers through tool calls?* This page describes only one layer of the repository: the **deterministic environment** under that question. It is made of the models, the referee that decides whether parameters work, the scores, the evaluation budget and the tasks. The environment contains no LLM and no optimizer. That separation matters: whatever searches for parameters can only talk to the environment through three budgeted calls, so it cannot change the referee, the targets or the budget. The optimizer wrappers, the future agent and the experimental design are outside this layer and are not covered here. Internal design decisions live in [NOTES.md](NOTES.md); this page explains the ideas and the structure of the environment.
 
 ## 2. The problem being posed
 
@@ -183,7 +183,7 @@ It is zero exactly when every target is a fixed point that is stable with margin
 - With $\tau_I=5$ oscillations are rare (~0.1% of random sets vs ~2% at $\tau_I=20$), so oscillatory difficulty is a knob for later.
 - The expert objective supports at most one unobserved population, and its best score is not always a checker success (see section 8).
 - Compute is not budgeted: a `simulate` call costs one evaluation whatever its $T$, but $T$ is capped at `T_max` (section 9).
-- Open decisions: [NOTES.md](../NOTES.md).
+- Open decisions: [NOTES.md](NOTES.md).
 
 ## 13. Minimal usage
 
